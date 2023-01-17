@@ -1,0 +1,89 @@
+MODULE RNL_E_dictionary(SYSMODULE)
+
+    !RNL_E_dictionary implements a generic list with a key / data structure
+
+    RECORD dictionary
+        string key;
+        dataPointer value;
+    ENDRECORD
+
+    CONST dictionary dictionary_NULL:=["",["","",0,"","",0,""]];
+
+    !append a new key/value pair to the dictionary
+    PROC dictionary_append(INOUT dictionary dic{*},string key,dataPointer value)
+        VAR dictionary item;
+        item.key := key;
+        item.value := value;
+        
+        FOR i FROM 1 TO Dim(dic,1) DO
+            IF dic{i}=dictionary_NULL THEN
+                dic{i}:=item;
+                RETURN ;
+            ENDIF
+        ENDFOR
+    ENDPROC
+
+    !pop the last key/value pair in the dictionary
+    FUNC dictionary dictionary_pop(INOUT dictionary dic{*})
+        FOR i FROM Dim(dic,1) TO 1 DO
+            IF dic{i}<>dictionary_NULL THEN
+                RETURN dic{i};
+            ENDIF
+        ENDFOR
+    ENDFUNC
+
+    !Get the lenght of the dictionary
+    FUNC num dictionary_lenght(INOUT dictionary dic{*})
+        VAR num lenght:=0;
+        FOR i FROM 1 TO Dim(dic,1) DO
+            IF dic{i}<>dictionary_NULL THEN
+                lenght:=lenght+1;
+            ENDIF
+        ENDFOR
+        RETURN lenght;
+    ENDFUNC
+
+    !Checks if dictionary has key
+    FUNC bool dictionary_has(INOUT dictionary dic{*},string key)
+        FOR i FROM 1 TO Dim(dic,1) DO
+            IF dic{i}.key=key RETURN TRUE;
+        ENDFOR
+        RETURN FALSE;
+    ENDFUNC
+
+    !Get the value assosiated with a key
+    FUNC dataPointer dictionary_get(INOUT dictionary dic{*},string key)
+        FOR i FROM 1 TO Dim(dic,1) DO
+            IF dic{i}.key=key RETURN dic{i}.value;
+        ENDFOR
+    ENDFUNC
+
+    !Set the value assosiated with a key. 
+    !If the key does not exist, create it
+    PROC dictionary_set(INOUT dictionary dic{*},string key,dataPointer value)
+
+        !Look for key
+        FOR i FROM 1 TO Dim(dic,1) DO
+            IF dic{i}.key=key dic{i}.value:=value;
+            IF dic{i}.key=key RETURN ;
+        ENDFOR
+
+        !Create key
+        dictionary_append dic,key,value;
+    ENDPROC
+
+    !delete a key/value in the dictionary
+    PROC dictionary_del(INOUT dictionary dic{*},string key)
+        FOR i FROM 1 TO Dim(dic,1) DO
+            IF dic{i}.key=key dic{i}:=dictionary_NULL;
+        ENDFOR
+    ENDPROC
+
+    !clear the entire dictionary
+    PROC dictionary_clear(INOUT dictionary dic{*})
+        FOR i FROM 1 TO Dim(dic,1) DO
+            dic{i}:=dictionary_NULL;
+        ENDFOR
+    ENDPROC
+
+ENDMODULE

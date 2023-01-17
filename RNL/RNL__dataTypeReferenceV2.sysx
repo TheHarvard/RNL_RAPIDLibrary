@@ -1,0 +1,534 @@
+MODULE RNL__dataTypeReferenceV2(SYSMODULE)
+
+    !Datatype: dataTypeReferenceV2
+    !Module with standard methods for the datatype
+
+    !***************************************************************************
+    ! Data
+    !***************************************************************************
+
+    RECORD dataTypeReferenceV2
+        dataPointer self;
+        num exampleNumber1;
+        num exampleNumber2;
+        num exampleNumber3;
+    ENDRECORD
+
+    !A constant that can be searched for to determine if the module is loaded
+    PERS dataType dataType_dataTypeReferenceV2:="dataTypeReferenceV2";
+
+    !Per module setting for whether the list should be used
+    !IF this bool is set to false then the NEW keyword
+    !will create a stirng value datapointer for this datatype.
+    !If it is set to true, then the NEW keyword will use the pre declared list.
+    LOCAL CONST bool USE_DYNAMIC_DATA_ALLOCATION:=FALSE;
+
+    !INHERITS_FROM is the type that this type inherits from.
+    ! "" signifies no inheritance
+    LOCAL CONST dataType INHERITS_FROM:="";
+
+    !Null constants
+    CONST dataTypeReferenceV2 dataTypeReferenceV2_NULL:=[["","",0,"","",0,""],9E9,9E9,9E9];
+    LOCAL CONST dataTypeReferenceV2 dataTypeReferenceV2_DEFAULT:=[["","",0,"","",0,""],0,0,0];
+
+    !Pre declared list to be dynamically allocated
+    LOCAL VAR dataTypeReferenceV2 list{1};
+
+    !interrupt for incomiung RMQ messages
+    LOCAL VAR intnum RMQ_receive_intnum;
+
+    !###########################################################################
+    ! Standard Code
+    !###########################################################################
+
+    !### Constructors and Destructors ###
+
+    !NEW constructor to allocate a data and return pointer
+    LOCAL PROC NEW(INOUT dataPointer pointer\dataPointer self)
+        VAR dataTypeReferenceV2 data;
+        VAR dataPointer self_;
+        VAR dataPointer inheritanceParent;
+        VAR dataPointer inheritanceParent_Pointer;
+
+        self_:=pointer;
+        IF Present(self) self_:=self;
+
+        data:=dataTypeReferenceV2_DEFAULT;
+        data.self:=self_;
+
+        IF USE_DYNAMIC_DATA_ALLOCATION=TRUE THEN
+
+            !Set the rmqLocation to this task
+            pointer.rmqLocation:=rmqQueue_SELF();
+
+            !Allocate a list position
+            pointer.type:=Type(list);
+            LIST_dataTypeReferenceV2_append list,data\index:=pointer.id;
+
+            IF NOT INHERITS_FROM="" THEN
+                !Create nessesary inheritance chain
+                inheritanceParent:=NEW_(INHERITS_FROM);
+                inheritanceParent_Pointer:=NEW_("dataPointer");
+                dataPointer_set inheritanceParent_Pointer,inheritanceParent;
+                pointer.inheritanceParent_id:=inheritanceParent_Pointer.id;
+                pointer.inheritanceParent_name:=inheritanceParent_Pointer.name;
+            ENDIF
+
+        ELSE
+
+            !Create a string value datatype
+            pointer:=dataTypeReferenceV2_(data);
+        ENDIF
+
+    ENDPROC
+
+    !Allocate a data, set the data to recived RMQ message, and return pointer
+    LOCAL PROC RMQ_NEW(INOUT dataPointer pointer,VAR rmqmessage message)
+
+        VAR dataTypeReferenceV2 data;
+        RMQGetMsgData message,data;
+
+        IF USE_DYNAMIC_DATA_ALLOCATION=TRUE THEN
+            NEW pointer;
+            dataTypeReferenceV2_set pointer,data;
+            RETURN ;
+        ENDIF
+
+        pointer:=dataTypeReferenceV2_(data);
+
+    ENDPROC
+
+    !Send RMQ message of this datatype
+    LOCAL PROC RMQ_send(INOUT dataPointer data,dataPointer queue,dataPointer code)
+        VAR dataTypeReferenceV2 data_;
+        VAR string queue_;
+        VAR num code_;
+
+        VAR rmqslot slot;
+
+        data_:=dataTypeReferenceV2_get(data);
+        queue_:=string_get(queue);
+        code_:=num_get(code);
+
+        RMQFindSlot slot,queue_;
+        RMQSendMessage slot,data_\UserDef:=code_;
+
+    ERROR
+        IF errno=ERR_RMQ_NAME THEN 
+            SkipWarn;
+            RAISE ERR_RMQ_NAME;
+        ENDIF
+        IF errno=ERR_RMQ_FULL THEN
+            SkipWarn;
+            IF RemainingRetries()>0 THEN
+                WaitTime 1;
+                RETRY;
+            ELSE
+                RAISE ERR_RMQ_FULL;
+            ENDIF
+        ENDIF
+    ENDPROC
+
+    !Recives RMQ message of this datatype
+    LOCAL TRAP RMQ_receive
+        RMQ_receive_;
+    ENDTRAP
+
+    !Cleans up any datapointer
+    LOCAL PROC ERASE(INOUT dataPointer pointer)
+
+        VAR dataPointer inheritanceParent;
+
+        !Call ERASE on the object that this object inherits from
+        IF pointer.inheritanceParent_name<>""
+            OR pointer.inheritanceParent_id>0 THEN
+            inheritanceParent.id:=pointer.inheritanceParent_id;
+            inheritanceParent.name:=pointer.inheritanceParent_name;
+
+            ERASE_ inheritanceParent;
+        ENDIF
+
+        !ERASE
+        IF dataPointer_isReference(pointer) dataTypeReferenceV2_set pointer,dataTypeReferenceV2_NULL;
+        IF dataPointer_isIndex(pointer) LIST_dataTypeReferenceV2_del list\keepIndexes,pointer.id;
+        pointer:=dataPointer_NULL;
+
+    ENDPROC
+
+    !### Get Self ###
+
+    LOCAL PROC getSelf(dataPointer pointer,INOUT dataPointer self)
+        VAR dataTypeReferenceV2 object;
+        object:=dataTypeReferenceV2_get(pointer);
+        self:=object.self;
+    ENDPROC
+
+    !### Direct Access to list ###
+
+    !Allow acces to list
+    FUNC dataTypeReferenceV2 RNL__dataTypeReferenceV2_list(num i)
+        RETURN list{i};
+    ENDFUNC
+
+    !Allow access to list lenght
+    FUNC num RNL__dataTypeReferenceV2_lenght()
+        !RETURN list_lenght;
+        RETURN LIST_dataTypeReferenceV2_lenght(list);
+    ENDFUNC
+
+    !### DataPointer methods ###
+
+    !Set a datapointers value
+    PROC dataTypeReferenceV2_set(INOUT dataPointer pointer,dataTypeReferenceV2 value)
+
+        !If the pointer points to a different rmq location
+        IF pointer.rmqLocation<>rmqQueue_NULL
+        OR pointer.rmqLocation<>rmqQueue_SELF() THEN
+            !
+            !
+        ENDIF
+
+
+        !Inheritance
+
+        IF dataPointer_isReference(pointer) SetDataVal pointer.name,value;
+        IF dataPointer_isReference(pointer) RETURN ;
+        IF dataPointer_isValue(pointer) pointer.value:=ValToStr(value);
+        IF dataPointer_isValue(pointer) RETURN ;
+        IF dataPointer_isIndex(pointer) list{pointer.id}:=value;
+        IF dataPointer_isIndex(pointer) RETURN ;
+        !If the pointer is none of the above, create a new pointer with string val
+        IF NOT USE_DYNAMIC_DATA_ALLOCATION pointer:=dataTypeReferenceV2_(value);
+        IF NOT USE_DYNAMIC_DATA_ALLOCATION RETURN ;
+        !ERROR
+        !Data Pointer Not set up
+        BookErrNo ERR_BAD_DATA_POINTER;
+        RAISE ERR_BAD_DATA_POINTER;
+    ERROR
+        IF ERRNO=ERR_BAD_DATA_POINTER RAISE ;
+    ENDPROC
+
+    !Get a datapointers value
+    FUNC dataTypeReferenceV2 dataTypeReferenceV2_get(dataPointer pointer)
+        VAR dataTypeReferenceV2 returnValue;
+        VAR dataPointer inheritancePointer;
+        VAR dataPointer inheritancePointerPointer;
+
+        !If the pointer points to a different rmq location
+        IF pointer.rmqLocation<>rmqQueue_NULL
+        OR pointer.rmqLocation<>rmqQueue_SELF() THEN
+            !
+            !
+        ENDIF
+
+        !Wrong datapointer type
+        IF pointer.type<>Type(returnValue) THEN
+
+            !Check if inheritance has right type
+            WHILE TRUE DO
+
+                !IF there are no more inheritance pointers, call error
+                IF pointer.inheritanceParent_id=0 AND pointer.inheritanceParent_name="" THEN
+                    BookErrNo ERR_BAD_DATA_POINTER;
+                    RAISE ERR_BAD_DATA_POINTER;
+                ENDIF
+
+                !Find inheritance parent pointer
+                inheritancePointerPointer.type:=Type(inheritancePointer);
+                inheritancePointerPointer.name:=pointer.inheritanceParent_name;
+                inheritancePointerPointer.id:=pointer.inheritanceParent_id;
+                inheritancePointer:=dataPointer_get(inheritancePointerPointer);
+
+                pointer:=inheritancePointer;
+
+                !IF the inheritance parent pointer has the right type, return it
+                IF pointer.type=Type(returnValue) RETURN dataTypeReferenceV2_get(pointer);
+
+            ENDWHILE
+
+        ENDIF
+
+        returnValue:=dataTypeReferenceV2_NULL;
+        IF dataPointer_isReference(pointer) GetDataVal pointer.name,returnValue;
+        IF dataPointer_isValue(pointer) errFromBool StrToVal(pointer.value,returnValue),ERR_SYM_ACCESS;
+        IF dataPointer_isIndex(pointer) returnValue:=list{pointer.id};
+        RETURN returnValue;
+
+    ERROR
+        IF ERRNO=ERR_BAD_DATA_POINTER RAISE ;
+    ENDFUNC
+
+    !Method for to create a value-datapointer from a value,
+    !or that points to a value
+    FUNC dataPointer dataTypeReferenceV2_(dataTypeReferenceV2 value\switch asReference)
+        VAR dataPointer pointer;
+        pointer.type:=Type(value);
+        IF Present(asReference) pointer.name:=ArgName(value);
+        IF NOT Present(asReference) pointer.value:=ValToStr(value);
+        RETURN pointer;
+    ENDFUNC
+
+    !### LIST methods ###
+
+    !Initialize new list
+    PROC LIST_dataTypeReferenceV2_clear(
+        INOUT dataTypeReferenceV2 list{*}
+        \INOUT num lenght)
+
+        FOR i FROM 1 TO Dim(list,1) DO
+            list{i}:=dataTypeReferenceV2_NULL;
+        ENDFOR
+
+        IF Present(lenght) lenght:=0;
+
+    ENDPROC
+
+    !Append a datapointer to the list
+    !The optional argument index will be set to the index that was used
+    PROC LIST_dataTypeReferenceV2_append(
+        INOUT dataTypeReferenceV2 list{*}
+        \INOUT num lenght,
+        dataTypeReferenceV2 item
+        \INOUT num index)
+
+        !Reject null input
+        IF item=dataTypeReferenceV2_NULL THEN
+            BookErrNo ERR_UNEXPECTED_NULL;
+            RAISE ERR_UNEXPECTED_NULL;
+        ENDIF
+
+        IF NOT Present(lenght) THEN
+            FOR i FROM 1 TO Dim(list,1) DO
+                IF list{i}=dataTypeReferenceV2_NULL THEN
+                    list{i}:=item;
+                    IF Present(index) index:=i;
+                    RETURN ;
+                ENDIF
+            ENDFOR
+            !ERROR
+            BookErrNo ERR_INDEX_OUT_OF_RANGE;
+            RAISE ERR_INDEX_OUT_OF_RANGE;
+            RETURN ;
+        ENDIF
+
+        lenght:=lenght+1;
+        list{lenght}:=item;
+        IF Present(index) index:=lenght;
+
+    ERROR
+        IF ERRNO=ERR_UNEXPECTED_NULL RAISE ;
+        IF ERRNO=ERR_INDEX_OUT_OF_RANGE RAISE ;
+    ENDPROC
+
+    !Pop the last data pointer in the list
+    !Or if index is specified, pops the index
+    FUNC dataTypeReferenceV2 LIST_dataTypeReferenceV2_pop(
+        INOUT dataTypeReferenceV2 list{*}
+        \INOUT num lenght,
+        \num index)
+
+        VAR dataTypeReferenceV2 item;
+
+        !Reject indexes ouside of lenght
+        IF Present(lenght) AND Present(index) THEN
+            IF index>lenght THEN
+                BookErrNo ERR_LIST_OUT_OF_RANGE;
+                RAISE ERR_LIST_OUT_OF_RANGE;
+            ENDIF
+        ENDIF
+
+        !Pop at spesific index
+        IF Present(index) THEN
+            item:=list{index};
+            list{index}:=dataTypeReferenceV2_NULL;
+            LIST_dataTypeReferenceV2_del list\lenght?lenght\keepIndexes,index;
+            RETURN item;
+        ENDIF
+
+        !Pop at last index, without lenght
+        IF NOT Present(lenght) THEN
+            FOR i FROM Dim(list,1) TO 1 DO
+                IF list{i}<>dataTypeReferenceV2_NULL THEN
+                    item:=list{i};
+                    list{i}:=dataTypeReferenceV2_NULL;
+                    RETURN item;
+                ENDIF
+            ENDFOR
+        ENDIF
+
+        !Pop at last index, with lenght
+        item:=list{lenght};
+        list{lenght}:=dataTypeReferenceV2_NULL;
+        lenght:=lenght-1;
+        RETURN item;
+
+    ERROR
+        IF ERRNO=ERR_LIST_OUT_OF_RANGE RAISE ;
+    ENDFUNC
+
+    !Delete an item at a position of the list
+    PROC LIST_dataTypeReferenceV2_del(
+        INOUT dataTypeReferenceV2 list{*}
+        \INOUT num lenght
+        \switch keepIndexes,
+        num index)
+
+        !Reject indexes ouside of lenght
+        IF Present(lenght) AND Present(index) THEN
+            IF index>lenght THEN
+                BookErrNo ERR_LIST_OUT_OF_RANGE;
+                RAISE ERR_LIST_OUT_OF_RANGE;
+            ENDIF
+        ENDIF
+
+        !Delet data
+        list{index}:=dataTypeReferenceV2_NULL;
+
+        !If indexes should be keept, then don't shift any data around
+        IF Present(keepIndexes) RETURN ;
+
+        !Shift down the above items to close gap, without lenght
+        IF NOT Present(lenght) THEN
+            FOR i FROM index TO Dim(list,1)-1 DO
+                list{index}:=list{index+1};
+            ENDFOR
+            list{Dim(list,1)}:=dataTypeReferenceV2_NULL;
+            RETURN ;
+        ENDIF
+
+        !Shift down the above items to close gap, with lenght
+        FOR i FROM index TO lenght-1 DO
+            list{index}:=list{index+1};
+        ENDFOR
+        list{lenght}:=dataTypeReferenceV2_NULL;
+        lenght:=lenght-1;
+
+    ERROR
+        IF ERRNO=ERR_LIST_OUT_OF_RANGE RAISE ;
+    ENDPROC
+
+    !Returns the number of items actively used in the list (not null)
+    FUNC num LIST_dataTypeReferenceV2_lenght(INOUT dataTypeReferenceV2 list{*})
+        VAR num lenght;
+        lenght:=0;
+
+        FOR i FROM 1 TO Dim(list,1) DO
+            IF list{i}<>dataTypeReferenceV2_NULL THEN
+                lenght:=lenght+1;
+            ENDIF
+        ENDFOR
+
+        RETURN lenght;
+    ENDFUNC
+
+
+    !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    ! Required Methods
+    !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    !Initialize
+    LOCAL PROC config()
+
+        !Connect RMQ interrupt
+        CONNECT RMQ_receive_intnum WITH RMQ_receive;
+        IRMQMessage dataTypeReferenceV2_NULL,RMQ_receive_intnum;
+
+        !Clear list
+        LIST_dataTypeReferenceV2_clear list;
+
+    ENDPROC
+
+    !NEW constructor with initial values
+    FUNC dataPointer NEW_dataTypeReferenceV2(
+        \num exampleNumber1
+        \num exampleNumber2
+        \num exampleNumber3
+        \rmqQueue inRMQqueue)
+
+        VAR dataPointer pointer;
+        VAR dataTypeReferenceV2 data;
+
+        VAR rmqCode_id rmqID;
+
+        !Allocate and set data
+        NEW pointer;
+
+        !Set initial data 
+        data:=dataTypeReferenceV2_get(pointer);
+
+        !Data without any setter function here
+        !(Only for datatypes without inheritance)
+        IF Present(exampleNumber1) data.exampleNumber1:=exampleNumber1;
+        IF Present(exampleNumber2) data.exampleNumber2:=exampleNumber2;
+        IF Present(exampleNumber3) data.exampleNumber3:=exampleNumber3;
+
+        dataTypeReferenceV2_set pointer,data;
+
+        !Data with setter functions here:
+
+        !Present(exampleNumber1) setExampleNumber1 pointer exampleNumber1
+        !Present(exampleNumber2) setExampleNumber2 pointer exampleNumber2
+        !Present(exampleNumber3) setExampleNumber3 pointer exampleNumber3
+
+        !IF a rmq location is specified, allocate the data there instead
+        IF Present(inRMQqueue) THEN
+            IF inRMQqueue<>rmqQueue_NULL AND inRMQqueue<>rmqQueue_SELF() THEN
+                rmqID:=RMQ_start(inRMQqueue,pointer\allocate);
+                ERASE pointer;
+                pointer:=RMQ_wait(rmqID);
+            ENDIF
+        ENDIF
+
+        !ALTERNATIVELY: send a new rmq command for data structures that are too large.
+
+        !Return pointer
+        RETURN pointer;
+    ENDFUNC
+
+    !Resolve an RMQ_execute command for this datatype. Return result
+    LOCAL PROC RMQ_execute(INOUT dataPointer pointer)
+        VAR dataTypeReferenceV2 data;
+
+        !Add custom behavior for "executing" this datatype here
+
+    ENDPROC
+
+    !event_handler is the default target for events subscribed to this object
+    LOCAL PROC event_handler(dataPointer pointer,dataPointer eventNote)
+        !Add default event handeling here
+    ENDPROC
+
+
+    !===========================================================================
+    ! Public Data/Object Methods
+    !===========================================================================
+
+    !---------------------------------------------------------------------------
+    ! Auxiliary Methods
+    !---------------------------------------------------------------------------
+
+    !///////////////////////////////////////////////////////////////////////////
+    ! Privat Data/Object Methods
+    !///////////////////////////////////////////////////////////////////////////
+
+    !+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+    ! Event Responses
+    !+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+    !$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+    ! States
+    !$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+    !&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+    ! Getter and Setter Methods
+    !&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+
+    !¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤
+    ! WRAPPER Methods
+    !¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤
+
+    !xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    ! Examples
+    !xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+ENDMODULE

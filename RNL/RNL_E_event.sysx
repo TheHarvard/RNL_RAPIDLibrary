@@ -1,0 +1,427 @@
+MODULE RNL_E_event(SYSMODULE)
+
+    !RNL_E_event implements events as a structure in RAPID.
+    !Events are used to loosly connect code in a flexible and dynamic manner.
+    !Events are closely integrated with state machines, objects, and data pointers,
+
+    !Dependencies:
+    ! - dataPointer
+    ! - 
+
+    RECORD event
+        num id;
+    ENDRECORD
+
+    !ALIAS string event;
+
+    ALIAS num eventPriority;
+
+
+    !    RECORD subscription
+    !        eventPriority priority;
+
+    !        event triggerEvent;
+    !        dataPointer triggerObject;
+
+    !        string reciverProcName;
+    !        dataPointer reciverObject;
+
+    !        event aliasEvent;
+    !        dataPointer aliasObject;
+    !    ENDRECORD
+
+
+    !Data
+
+    !NULL
+    !    VAR subscription subscription_NULL;
+    CONST event event_NULL:=[0];
+
+
+    !List lenght
+    CONST num subscriptionList_NO:=5;
+
+    !Database of "Homeless" subscriptions
+    PERS subscription subscription_List{1000};
+
+    !Methods
+
+    !Checks if event is still null, and if so, loops through all declared events
+    !and finds an available id to allocate an event.
+    !Relatively slow, but is only required once as events are PERSistant.
+    PROC event_setup(INOUT event e)
+
+        VAR datapos block;
+        VAR string name;
+        VAR event oldEventValue;
+        VAR event newEventValue;
+        VAR bool valueConflict;
+
+        VAR bool symbolValid;
+
+        !If event is allready set up, return
+        IF e<>event_NULL RETURN ;
+
+        !Loop through all events and look for an available numeric value
+        newEventValue.id:=1;
+        valueConflict:=TRUE;
+        WHILE valueConflict=TRUE DO
+            valueConflict:=FALSE;
+            oldEventValue:=event_NULL;
+            SetDataSearch "event"\TypeMod:="RNL_E_event"\PersSym;
+            !Loop through all events, logging conflicts
+            WHILE GetNextSym(name,block\Recursive) DO
+                symbolValid:=TRUE;
+                GetDataVal name\block:=block,oldEventValue;
+                IF symbolValid AND name<>ArgName(e) THEN
+                    IF newEventValue=oldEventValue valueConflict:=TRUE;
+                    IF newEventValue=oldEventValue newEventValue.id:=oldEventValue.id+1;
+                ENDIF
+            ENDWHILE
+        ENDWHILE
+
+        e:=newEventValue;
+
+    ERROR
+        !ERR_SYM_ACCESS means that the found symbol was unaccessable
+        IF ERRNO=ERR_SYM_ACCESS THEN
+            symbolValid:=FALSE;
+            TRYNEXT;
+        ENDIF
+        RAISE ;
+    ENDPROC
+
+
+    PROC TRIGGER_EVENT_FROM_COMMAND(
+        eventInfo einfo)
+
+        TRIGGER
+        \object:=einfo.triggerObject,
+        einfo.triggerEvent,
+        \data:=einfo.data,
+        \timestamp:=einfo.timestamp;
+
+    ENDPROC
+
+
+    !Procedure used to trigger an event
+    !arg2 through 12 are added for cases where an event should deliver 
+    !Multible values, should rarely be used
+    PROC TRIGGER(
+    \dataPointer object,
+    INOUT event e,
+    \dataPointer data,
+    \dataPointer arg2,
+    \dataPointer arg3,
+    \dataPointer arg4,
+    \dataPointer arg5,
+    \dataPointer arg6,
+    \dataPointer arg7,
+    \dataPointer arg8,
+    \dataPointer arg9,
+    \dataPointer arg10,
+    \dataPointer arg11,
+    \dataPointer arg12,
+    \unixTime timestamp
+    )
+
+        VAR eventInfo notification;
+        VAR subscription eventSubscription;
+
+        VAR num currentPriotity;
+        VAR num nextPriotity;
+
+        !Num max and min values retrived from the documentation
+        VAR num numMax:=8388608;
+        VAR num numMin:=-8388607;
+
+        !Data Search variables
+        VAR datapos block;
+        VAR string name;
+        VAR bool symbolValid;
+
+        !Set Timestamp for the event
+        notification.timestamp:=unixTime_getCurrent();
+        IF Present(timestamp) THEN
+            IF timestamp<>unixTime_NULL notification.timestamp:=timestamp;
+        ENDIF
+
+        !Setup event if not allready set up
+        event_setup e;
+
+        !Configure the default triggerobject with the local RMQ queue
+        notification.triggerObject:=rmqObject(rmqQueue_SELF());
+
+        !Set up event notification
+        notification.triggerEvent:=e;
+        IF Present(object) notification.triggerObject:=object;
+        IF Present(data) notification.data:=data;
+
+        !Logg event
+        TPWrite "EVENT: "+event_getNameFromID(e);
+
+        !Loop through, and try to execute the subscriptions on each priority
+        currentPriotity:=numMax;
+        !WHILE currentPriotity>numMin DO
+
+        nextPriotity:=numMin;
+
+        !Loop through global search 
+        SetDataSearch "subscription"\TypeMod:="RNL__subscription"\PersSym;
+        WHILE GetNextSym(name,block\Recursive) DO
+            symbolValid:=TRUE;
+            GetDataVal name,\block:=block,eventSubscription;
+
+            IF symbolValid THEN
+
+                subscription_execute eventSubscription,notification\priority:=currentPriotity
+                            \arg2?arg2,
+                            \arg3?arg3,
+                            \arg4?arg4,
+                            \arg5?arg5,
+                            \arg6?arg6,
+                            \arg7?arg7,
+                            \arg8?arg8,
+                            \arg9?arg9,
+                            \arg10?arg10,
+                            \arg11?arg11,
+                            \arg12?arg12;
+
+                !Evaluate what next priority should be (current highest)
+                IF eventSubscription.priority>nextPriotity AND eventSubscription.priority<currentPriotity
+                        nextPriotity:=eventSubscription.priority;
+
+            ENDIF
+
+        ENDWHILE
+
+        !Loop through all dynamically allocated subscriptions
+        IF RNL__subscription_lenght()>=1 THEN
+            FOR i FROM 1 TO RNL__subscription_lenght() DO
+
+                eventSubscription:=RNL__subscription_list(i);
+
+                !subscription_execute eventSubscription,notification\priority:=currentPriotity
+                subscription_execute eventSubscription,notification\priority:=0
+                                \arg2?arg2,
+                                \arg3?arg3,
+                                \arg4?arg4,
+                                \arg5?arg5,
+                                \arg6?arg6,
+                                \arg7?arg7,
+                                \arg8?arg8,
+                                \arg9?arg9,
+                                \arg10?arg10,
+                                \arg11?arg11,
+                                \arg12?arg12;
+
+                !Evaluate what next priority should be (current highest)
+                !IF eventSubscription.priority>nextPriotity AND eventSubscription.priority<currentPriotity
+                !    nextPriotity:=eventSubscription.priority;
+
+            ENDFOR
+        ENDIF
+        !ENDIF
+
+        !
+
+        currentPriotity:=nextPriotity;
+
+        !ENDWHILE
+
+        !Finished
+
+    ERROR
+
+        IF ERRNO=ERR_SYM_ACCESS THEN
+            symbolValid:=FALSE;
+            TRYNEXT;
+        ENDIF
+
+        RAISE ;
+    ENDPROC
+
+    !Check an event subscription and execute it if it fits the event
+    PROC subscription_execute(
+        subscription eventSubscription,
+        eventInfo notifaction,
+        \num priority
+        \dataPointer arg2,
+        \dataPointer arg3,
+        \dataPointer arg4,
+        \dataPointer arg5,
+        \dataPointer arg6,
+        \dataPointer arg7,
+        \dataPointer arg8,
+        \dataPointer arg9,
+        \dataPointer arg10,
+        \dataPointer arg11,
+        \dataPointer arg12
+        )
+
+        VAR bool successFlag;
+        VAR dataPointer eInfo;
+
+        !does the event match the subscription? If not, return.
+        IF NOT (notifaction.triggerEvent=eventSubscription.triggerEvent) RETURN ;
+
+        !does the triggering object mathc the subscription? If not, return.
+        IF NOT (notifaction.triggerObject=eventSubscription.triggerObject) RETURN ;
+
+        !If priority is specified, only execute if priority is correct
+        IF Present(priority) THEN
+            IF priority<>eventSubscription.priority RETURN ;
+        ENDIF
+
+        !Does this subscription specify an alias? if so, apply it.
+        IF eventSubscription.aliasEvent<>event_NULL
+        notifaction.triggerEvent:=eventSubscription.aliasEvent;
+
+        IF eventSubscription.aliasObject.type<>dataPointer_NULL.type
+        notifaction.triggerObject:=eventSubscription.aliasObject;
+
+        eInfo:=NEW_("eventInfo");
+        eventInfo_set eInfo,notifaction;
+
+        !If an rmq location is specified without a target object/method,
+        !Send the event as an event RMQ message and not a command RMQ message
+        IF eventSubscription.reciverObject.rmqLocation<>rmqQueue_NULL
+        AND eventSubscription.reciverObject.rmqLocation<>rmqQueue_SELF()
+        AND eventSubscription.reciverObject.type=""
+        AND (eventSubscription.reciverProcName="" OR eventSubscription.reciverProcName="event_handler") THEN
+
+            RMQ_event
+                eventSubscription.reciverObject.rmqLocation,
+                    notifaction.triggerEvent
+                    \data:=notifaction.data;
+
+            successFlag:=TRUE;
+
+        ELSE
+
+
+            !Ready to call event reciver
+            try
+            \obj:=eventSubscription.reciverObject,
+            eventSubscription.reciverProcName
+            \arg1:=eInfo
+            \arg2?arg2,
+            \arg3?arg3,
+            \arg4?arg4,
+            \arg5?arg5,
+            \arg6?arg6,
+            \arg7?arg7,
+            \arg8?arg8,
+            \arg9?arg9,
+            \arg10?arg10,
+            \arg11?arg11,
+            \arg12?arg12
+            \successFlag:=successFlag;
+
+            !Try agains without e-info in arg1
+            IF NOT successFlag THEN
+                try
+                    \obj:=eventSubscription.reciverObject,
+                    eventSubscription.reciverProcName
+
+                    \arg2?arg2,
+                    \arg3?arg3,
+                    \arg4?arg4,
+                    \arg5?arg5,
+                    \arg6?arg6,
+                    \arg7?arg7,
+                    \arg8?arg8,
+                    \arg9?arg9,
+                    \arg10?arg10,
+                    \arg11?arg11,
+                    \arg12?arg12
+                    \successFlag:=successFlag;
+            ENDIF
+
+        ENDIF
+
+        ERASE_ eInfo;
+
+        IF NOT successFlag THEN
+            !ERROR
+            ErrWrite "Subscription failed to call response: "+eventSubscription.reciverProcName
+            ,"in object: "+eventSubscription.reciverObject.name
+            \RL2:="The calling event was: "+event_getNameFromID(notifaction.triggerEvent)
+            \RL3:="From object: "+ValToStr(notifaction.triggerObject.name);
+            Stop;
+        ENDIF
+
+    ERROR
+        !RAISE ;
+
+    ENDPROC
+
+    FUNC event event_getIDFromName(string name)
+        VAR event id;
+        GetDataVal name,id;
+        RETURN id;
+    ENDFUNC
+
+    FUNC string event_getNameFromID(event id)
+        VAR string name;
+        VAR datapos block;
+        VAR event e;
+
+        SetDataSearch "event"\TypeMod:="RNL_E_event"\PersSym;
+        WHILE GetNextSym(name,block\Recursive) DO
+            e:=event_NULL;
+            GetDataVal name,\block:=block,e;
+            IF e.id=id.id THEN
+                RETURN name;
+            ENDIF
+        ENDWHILE
+
+        RETURN string_NULL;
+    ENDFUNC
+
+
+    !Set a datapointers value
+    PROC event_set(INOUT dataPointer pointer,INOUT event value)
+        event_setup value;
+        SetDataVal pointer.name,value;
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !Get a datapointers value
+    FUNC event event_get(dataPointer pointer)
+        VAR event returnValue;
+        returnValue:=event_NULL;
+        IF dataPointer_isReference(pointer) GetDataVal pointer.name,returnValue;
+        IF dataPointer_isValue(pointer) errFromBool StrToVal(pointer.value,returnValue),ERR_SYM_ACCESS;
+        !IF dataPointer_isIndex(pointer) returnValue:=list{pointer.id};
+        RETURN returnValue;
+    ERROR
+        !RAISE ;
+    ENDFUNC
+
+    !Method for to create a value-datapointer from a value, or that points to a value
+    FUNC dataPointer event_(INOUT event value)
+        VAR dataPointer pointer;
+        event_setup value;
+        pointer.type:=Type(value);
+        pointer.name:=ArgName(value);
+        RETURN pointer;
+    ERROR
+        !RAISE ;
+    ENDFUNC
+
+
+    !Example
+
+    !    !on_exampleEvent is an example event response.
+    !    PROC on_exampleEvent(dataPointer eInfo)
+    !        <SMT>
+    !    ENDPROC
+
+    !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    ! Standardized Methods
+    !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    !%%%% DataPointer methods %%%%
+
+ENDMODULE

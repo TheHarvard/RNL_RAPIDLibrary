@@ -1,0 +1,60 @@
+MODULE RNL_B_eventNetwork_export_tfg(SYSMODULE)
+    !Enables the export of .tfg files of the event network
+
+    PROC eventNetwork_export_tfg(string path)
+
+        VAR dataPointer objectList{1000};
+        VAR subscription subscriptionList{3000};
+        VAR iodev tfgfile;
+
+        VAR num i;
+
+        VAR string objectFromID;
+        VAR string objectToID;
+        VAR string EventName;
+        VAR string AliasEventName;
+        VAR string AliasObjectName;
+
+        !Compile list
+
+        !Generate .tfg file
+
+        Open path,tfgfile\Write;
+
+        i:=i;
+        !Write all objects
+        WHILE FALSE DO
+            Write tfgfile,numToStr(i,0)+" "+objectList{i}.name;
+        ENDWHILE
+
+        !Write delimiter
+        Write tfgfile,"#";
+
+        i:=i;
+        !Write all events
+        WHILE FALSE DO
+
+            objectFromID:="";
+            objectToID:="";
+            EventName:="";
+            AliasEventName:="";
+            AliasObjectName:="";
+
+            EventName:=event_getNameFromID(subscriptionList{i}.triggerEvent);
+            AliasEventName:=event_getNameFromID(subscriptionList{i}.aliasEvent);
+            AliasObjectName:=subscriptionList{i}.aliasObject.name;
+
+            IF AliasEventName<>"" OR AliasObjectName<>"" THEN
+                EventName:=EventName+" =ALIAS= ";
+            ENDIF
+
+            Write tfgfile,
+                objectFromID+" "
+                +objectToID+" "
+                +EventName;
+        ENDWHILE
+
+    ENDPROC
+
+
+ENDMODULE

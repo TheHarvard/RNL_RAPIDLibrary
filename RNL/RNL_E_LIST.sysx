@@ -1,0 +1,57 @@
+MODULE RNL_E_LIST(SYSMODULE)
+    
+    !RNL_E_LIST implements a generic list based on generic datapointers
+    
+    !Dependencies:
+    ! - dataPointer
+    
+    VAR dataPointer exampleList{20};
+    
+    PROC LIST_append(INOUT dataPointer list{*},dataPointer item)
+
+        VAR dataPointer NULL;
+        NULL:=dataPointer_NULL;
+
+        FOR i FROM 1 TO Dim(list,1) DO
+            IF list{i}=NULL THEN
+                list{i}:=item;
+                RETURN ;
+            ENDIF
+        ENDFOR
+
+    ENDPROC
+
+    FUNC dataPointer LIST_pop(INOUT dataPointer list{*})
+
+        VAR dataPointer item;
+        VAR dataPointer NULL;
+        NULL:=dataPointer_NULL;
+
+        FOR i FROM Dim(list,1) TO 1 DO
+            IF list{i}<>NULL THEN
+                item:=list{i};
+                list{i}:=NULL;
+                RETURN item;
+            ENDIF
+        ENDFOR
+
+    ENDFUNC
+
+    FUNC num LIST_lenght(INOUT dataPointer list{*})
+
+        VAR num lenght;
+        VAR dataPointer NULL;
+        lenght:=0;
+        NULL:=dataPointer_NULL;
+
+        FOR i FROM 1 TO Dim(list,1) DO
+            IF list{i}<>NULL THEN
+                lenght:=lenght+1;
+            ENDIF
+        ENDFOR
+
+        RETURN lenght;
+
+    ENDFUNC
+    
+ENDMODULE

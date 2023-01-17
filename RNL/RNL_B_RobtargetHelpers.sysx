@@ -1,0 +1,61 @@
+MODULE RNL_B_RobtargetHelpers(SYSMODULE)
+
+    !Offs - offset a point in x/y/z
+    !RelTool - offset 
+
+!    FUNC robtarget Offs(robtarget Point,\num x,\num y,\num z,
+!        \num ax1,\num ax2,\num ax3,\num ax4,\num ax5,\num ax6, 
+!        \tooldata tool, \wobjdata wobj) 
+        
+!        VAR jointtarget j;
+!        VAR tooldata tool_;
+!        VAR wobjdata wobj_;
+!        tool_:=CTool();
+!        wobj_:=CWObj();
+!        IF Present(tool) tool_:=tool;
+!        IF Present(wobj) wobj_:=wobj;
+        
+!        Point.trans.x := Point.trans.x + x;
+!        Point.trans.y := Point.trans.y + y;
+!        Point.trans.z := Point.trans.z + z;
+        
+!        j := CalcJointT(Point,tool_\WObj:=wobj_);
+!        IF Present(ax1) j.robax.rax_1 := j.robax.rax_1 + ax1;
+!        IF Present(ax2) j.robax.rax_2 := j.robax.rax_2 + ax2;
+!        IF Present(ax3) j.robax.rax_3 := j.robax.rax_3 + ax3;
+!        IF Present(ax4) j.robax.rax_4 := j.robax.rax_4 + ax4;
+!        IF Present(ax5) j.robax.rax_5 := j.robax.rax_5 + ax5;
+!        IF Present(ax6) j.robax.rax_6 := j.robax.rax_6 + ax6;
+!        Point := CalcRobT(j,tool_\WObj:=wobj_);
+!        RETURN Point;
+!    ENDFUNC
+
+!    FUNC robtarget Abs(robtarget Point,num x,num y,num z,
+!        \num ax1,\num ax2,\num ax3,\num ax4,\num ax5,\num ax6, 
+!        \tooldata tool, \wobjdata wobj)
+        
+!        VAR jointtarget j;
+!        VAR tooldata tool_;
+!        VAR wobjdata wobj_;
+!        tool_:=CTool();
+!        wobj_:=CWObj();
+!        IF Present(tool) tool_:=tool;
+!        IF Present(wobj) wobj_:=wobj;
+        
+!        Point.trans.x := x;
+!        Point.trans.y := y;
+!        Point.trans.z := z;
+        
+!        j := CalcJointT(Point,tool_\WObj:=wobj_);
+!        IF Present(ax1) j.robax.rax_1 := ax1;
+!        IF Present(ax2) j.robax.rax_2 := ax2;
+!        IF Present(ax3) j.robax.rax_3 := ax3;
+!        IF Present(ax4) j.robax.rax_4 := ax4;
+!        IF Present(ax5) j.robax.rax_5 := ax5;
+!        IF Present(ax6) j.robax.rax_6 := ax6;
+!        Point := CalcRobT(j,tool_\WObj:=wobj_);
+!        RETURN Point;
+!    ENDFUNC
+
+
+ENDMODULE

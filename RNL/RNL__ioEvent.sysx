@@ -1,0 +1,952 @@
+MODULE RNL__ioEvent(SYSMODULE)
+
+    RECORD ioEvent
+        intnum interrupt;
+        string signalName;
+        eventInfo eInfo;
+        num previousValue;
+        string dataPers_previousValue;
+        string signalType;
+        dionum digital_TriggValue;
+        aiotrigg analog_Condition;
+        num analog_HighValue;
+        num analog_LowValue;
+        num analog_DeltaValue;
+        bool analog_DPos;
+        bool analog_DNeg;
+        bool executeOutOfOrder;
+    ENDRECORD
+
+    !Per module setting for weather the list should be used
+    !IF this bool is set to false (default) then the NEW keyword will
+    !will create a stirng value datapointer for this datatype.
+    !If it is set to true, then the NEW keyword will use the pre declared list.
+    LOCAL CONST bool USE_LIST:=FALSE;
+
+    VAR ioEvent ioEvent_NULL;
+    LOCAL VAR ioEvent NULL;
+
+!    LOCAL CONST string DIGITAL_INPUT:="DIGITAL_INPUT";
+!    LOCAL CONST string DIGITAL_OUTPUT:="DIGITAL_OUTPUT";
+!    LOCAL CONST string ANALOG_INPUT:="ANALOG_INPUT";
+!    LOCAL CONST string ANALOG_OUTPUT:="ANALOG_OUTPUT";
+!    LOCAL CONST string GROUP_INPUT:="GROUP_INPUT";
+!    LOCAL CONST string GROUP_OUTPUT:="GROUP_OUTPUT";
+!    LOCAL CONST string DATA_PERS:="DATA_PERS";
+    LOCAL CONST string DIGITAL_INPUT:="signaldi";
+    LOCAL CONST string DIGITAL_OUTPUT:="signaldo";
+    LOCAL CONST string ANALOG_INPUT:="signalai";
+    LOCAL CONST string ANALOG_OUTPUT:="Signalao";
+    LOCAL CONST string GROUP_INPUT:="Signalgi";
+    LOCAL CONST string GROUP_OUTPUT:="Signalgo";
+    LOCAL CONST string DATA_PERS:="DATA_PERS";
+    LOCAL CONST num ID_DOMAIN_DI:=10000;
+    LOCAL CONST num ID_DOMAIN_DO:=20000;
+    LOCAL CONST num ID_DOMAIN_AI:=30000;
+    LOCAL CONST num ID_DOMAIN_AO:=40000;
+    LOCAL CONST num ID_DOMAIN_GI:=50000;
+    LOCAL CONST num ID_DOMAIN_GO:=60000;
+    LOCAL CONST num ID_DOMAIN_PERS:=70000;
+
+    VAR errnum ERR_IOEVENT_BAD_TYPE:=-1;
+    
+    PERS event event_ioEvent := [3000];
+
+
+    !Data
+    !NOTE: ALL LISTS MUST HAVE SIZE 100
+    VAR ioEvent DI_Events1{100};
+    VAR num DI_Events1_lenght:=0;
+    VAR ioEvent DI_Events2{100};
+    VAR num DI_Events2_lenght:=0;
+    VAR ioEvent DI_Events3{100};
+    VAR num DI_Events3_lenght:=0;
+
+    VAR ioEvent DO_Events1{100};
+    VAR num DO_Events1_lenght:=0;
+    VAR ioEvent DO_Events2{100};
+    VAR num DO_Events2_lenght:=0;
+    VAR ioEvent DO_Events3{100};
+    VAR num DO_Events3_lenght:=0;
+
+    VAR ioEvent AI_Events1{100};
+    VAR num AI_Events1_lenght:=0;
+
+    VAR ioEvent AO_Events1{100};
+    VAR num AO_Events1_lenght:=0;
+
+    VAR ioEvent GI_Events1{100};
+    VAR num GI_Events1_lenght:=0;
+
+    VAR ioEvent GO_Events1{100};
+    VAR num GO_Events1_lenght:=0;
+
+    VAR ioEvent PERS_Events1{100};
+    VAR num PERS_Events1_lenght:=0;
+    VAR ioEvent PERS_Events2{100};
+    VAR num PERS_Events2_lenght:=0;
+
+    !Buffer for events
+    VAR eventInfo ioEventBuffer{200};
+    VAR num ioEventBuffer_lenght;
+
+    !Flag to allow event execution as interrupt
+    LOCAL VAR bool allow_executeOutOfOrder:=FALSE;
+
+    TRAP ioEvent_DI_handler1
+        ioEvent_handler DI_Events1,DI_Events1_lenght;
+    ENDTRAP
+
+    TRAP ioEvent_DI_handler2
+        ioEvent_handler DI_Events2,DI_Events2_lenght;
+    ENDTRAP
+
+    TRAP ioEvent_DI_handler3
+        ioEvent_handler DI_Events3,DI_Events3_lenght;
+    ENDTRAP
+
+    TRAP ioEvent_DO_handler1
+        ioEvent_handler DO_Events1,DO_Events1_lenght;
+    ENDTRAP
+
+    TRAP ioEvent_DO_handler2
+        ioEvent_handler DO_Events2,DO_Events2_lenght;
+    ENDTRAP
+
+    TRAP ioEvent_DO_handler3
+        ioEvent_handler DO_Events3,DO_Events3_lenght;
+    ENDTRAP
+
+    TRAP ioEvent_AI_handler1
+        ioEvent_handler AI_Events1,AI_Events1_lenght;
+    ENDTRAP
+
+    TRAP ioEvent_AO_handler1
+        ioEvent_handler AO_Events1,AO_Events1_lenght;
+    ENDTRAP
+
+    TRAP ioEvent_GI_handler1
+        ioEvent_handler GI_Events1,GI_Events1_lenght;
+    ENDTRAP
+
+    TRAP ioEvent_GO_handler1
+        ioEvent_handler GO_Events1,GO_Events1_lenght;
+    ENDTRAP
+
+    TRAP ioEvent_PERS_handler1
+        ioEvent_handler PERS_Events1,PERS_Events1_lenght;
+    ENDTRAP
+
+    TRAP ioEvent_PERS_handler2
+        ioEvent_handler PERS_Events2,PERS_Events2_lenght;
+    ENDTRAP
+
+
+    !Determines what interrupt occured, and call their respective events.
+    PROC ioEvent_handler(INOUT ioEvent ioEvent_List{*},INOUT num listLenght)
+
+        VAR signaldi alias_DI;
+        VAR signaldo alias_DO;
+        VAR signalai alias_AI;
+        VAR signalao alias_AO;
+        VAR signalgi alias_GI;
+        VAR signalgo alias_GO;
+        VAR string signalName;
+
+        FOR i FROM 1 TO listLenght DO
+
+            TEST ioEvent_List{i}.signalType
+
+            CASE DIGITAL_INPUT:
+
+                signalName := ioEvent_List{i}.signalName;
+                AliasIO signalName,alias_DI;
+                IF ioEvent_List{i}.previousValue<>DInput(alias_DI) THEN
+                    IF (ioEvent_List{i}.digital_TriggValue=high AND DInput(alias_DI)=1)
+                    OR (ioEvent_List{i}.digital_TriggValue=low AND DInput(alias_DI)=0)
+                    OR (ioEvent_List{i}.digital_TriggValue=edge) THEN
+                        queueEventinfo ioEvent_List{i},num_(DInput(alias_DI));
+                    ENDIF
+                ENDIF
+                ioEvent_List{i}.previousValue:=DInput(alias_DI);
+
+            CASE DIGITAL_OUTPUT:
+
+                signalName := ioEvent_List{i}.signalName;
+                AliasIO signalName,alias_DO;
+                IF ioEvent_List{i}.previousValue<>DOutput(alias_DO) THEN
+                    IF (ioEvent_List{i}.digital_TriggValue=high AND DOutput(alias_DO)=1)
+                    OR (ioEvent_List{i}.digital_TriggValue=low AND DOutput(alias_DO)=0)
+                    OR (ioEvent_List{i}.digital_TriggValue=edge) THEN
+                        queueEventinfo ioEvent_List{i},num_(DOutput(alias_DO));
+                    ENDIF
+                ENDIF
+                ioEvent_List{i}.previousValue:=DOutput(alias_DO);
+
+            CASE ANALOG_INPUT:
+
+                ErrWrite "ANALOG TRAP NOT IMPLEMENTED YET","";
+                Stop;
+
+            CASE ANALOG_OUTPUT:
+
+                ErrWrite "ANALOG TRAP NOT IMPLEMENTED YET","";
+                Stop;
+
+            CASE GROUP_INPUT:
+
+                signalName := ioEvent_List{i}.signalName;
+                AliasIO signalName,alias_DI;
+                IF ioEvent_List{i}.previousValue<>DInput(alias_DI) THEN
+                    queueEventinfo ioEvent_List{i},num_(GInput(alias_GI));
+                ENDIF
+                ioEvent_List{i}.previousValue:=DInput(alias_DI);
+
+            CASE GROUP_OUTPUT:
+
+                signalName := ioEvent_List{i}.signalName;
+                AliasIO signalName,alias_DI;
+                IF ioEvent_List{i}.previousValue<>DInput(alias_DI) THEN
+                    queueEventinfo ioEvent_List{i},num_(GOutput(alias_GO));
+                ENDIF
+                ioEvent_List{i}.previousValue:=DInput(alias_DI);
+
+            CASE DATA_PERS:
+                !???
+
+            DEFAULT:
+                !ERROR
+            ENDTEST
+
+        ENDFOR
+
+    ENDPROC
+
+    !Queues an event in the buffer for later
+    LOCAL PROC queueEventinfo(ioEvent IO_event,dataPointer value)
+        VAR eventInfo eInfo;
+        eInfo:=IO_event.eInfo;
+        eInfo.data:=value;
+
+        IF IO_event.executeOutOfOrder=TRUE AND allow_executeOutOfOrder=TRUE THEN
+            !Execute now (for example motion events)
+            TRIGGER
+                \object:=eInfo.triggerObject,
+                eInfo.triggerEvent,
+                \data:=eInfo.data;
+        ELSE
+            !Queue for later
+            LIST_eventInfo_append ioEventBuffer,\lenght:=ioEventBuffer_lenght,eInfo;
+        ENDIF
+
+    ENDPROC
+
+    !Executes all queued events
+    PROC ioEvent_executeQueuedEvents()
+        VAR eventInfo eInfo;
+
+        WHILE ioEventBuffer_lenght>1 DO
+
+            eInfo:=LIST_eventInfo_pop(ioEventBuffer\lenght:=ioEventBuffer_lenght);
+
+            TRIGGER
+            \object:=eInfo.triggerObject,
+            eInfo.triggerEvent,
+            \data:=eInfo.data;
+
+        ENDWHILE
+
+    ENDPROC
+
+    !###########################################################################
+    ! NEW Constructor and ERASE Destructor
+    !###########################################################################
+
+    !NEW constructor with initial values
+    FUNC dataPointer NEW_ioEvent(
+        \dataPointer signal
+        |string signalName
+        \dataPointer triggerObject
+        \INOUT event triggerEvent
+        \switch TYPE_DIGITAL_INPUT
+        |switch TYPE_DIGITAL_OUTPUT
+        |switch TYPE_ANALOG_INPUT
+        |switch TYPE_ANALOG_OUTPUT
+        |switch TYPE_GROUP_INPUT
+        |switch TYPE_GROUP_OUTPUT
+        \dionum digital_TriggValue
+        \aiotrigg analog_Condition
+        \num analog_HighValue
+        \num analog_LowValue
+        \num analog_DeltaValue
+        \bool analog_DPos
+        \bool analog_DNeg
+        )
+        VAR dataPointer pointer;
+        VAR ioEvent data;
+
+        !Setup event
+        IF Present(triggerEvent) event_setup triggerEvent;
+
+        !Allocate and set data
+        NEW pointer;
+
+        !Set initial data 
+        !data := ioEvent_get(pointer);
+
+        IF Present(signal) THEN
+            data.signalName:=signal.name;
+            IF signal.type=dataType_signaldi data.signalType:=DIGITAL_INPUT;
+            IF signal.type=dataType_signaldo data.signalType:=DIGITAL_OUTPUT;
+            IF signal.type=dataType_signalgi data.signalType:=ANALOG_INPUT;
+            IF signal.type=dataType_signalgo data.signalType:=ANALOG_OUTPUT;
+            IF signal.type=dataType_signalai data.signalType:=GROUP_INPUT;
+            IF signal.type=dataType_signalao data.signalType:=GROUP_OUTPUT;
+        ENDIF
+
+        IF Present(signalName) data.signalName:=signalName;
+        IF Present(triggerObject) data.eInfo.triggerObject:=triggerObject;
+        data.eInfo.triggerEvent := event_ioEvent;
+        IF Present(triggerEvent) data.eInfo.triggerEvent:=triggerEvent;
+
+        IF Present(TYPE_DIGITAL_INPUT) data.signalType:=DIGITAL_INPUT;
+        IF Present(TYPE_DIGITAL_OUTPUT) data.signalType:=DIGITAL_OUTPUT;
+        IF Present(TYPE_ANALOG_INPUT) data.signalType:=ANALOG_INPUT;
+        IF Present(TYPE_ANALOG_OUTPUT) data.signalType:=ANALOG_OUTPUT;
+        IF Present(TYPE_GROUP_INPUT) data.signalType:=GROUP_INPUT;
+        IF Present(TYPE_GROUP_OUTPUT) data.signalType:=GROUP_OUTPUT;
+
+        data.digital_TriggValue:=2;
+        IF Present(digital_TriggValue) data.digital_TriggValue:=digital_TriggValue;
+        IF Present(analog_Condition) data.analog_Condition:=analog_Condition;
+        IF Present(analog_HighValue) data.analog_HighValue:=analog_HighValue;
+        IF Present(analog_LowValue) data.analog_LowValue:=analog_LowValue;
+        IF Present(analog_DeltaValue) data.analog_DeltaValue:=analog_DeltaValue;
+        IF Present(analog_DPos) data.analog_DPos:=analog_DPos;
+        IF Present(analog_DNeg) data.analog_DNeg:=analog_DNeg;
+
+        ioEvent_set pointer,data;
+
+        !Return pointer
+        RETURN pointer;
+    ENDFUNC
+
+    !Allocate a data and return pointer
+    LOCAL PROC NEW(INOUT dataPointer pointer)
+        VAR ioEvent data;
+        pointer.type:=Type(data);
+        pointer.id:=-1;
+    ENDPROC
+
+    !Resolve an RMQ_execute command for this datatype. Return result
+    LOCAL PROC RMQ_execute(INOUT dataPointer pointer,VAR rmqmessage message)
+        VAR ioEvent data;
+        RMQGetMsgData message,data;
+
+        !Add custom behavior for this datatype here
+        pointer:=dataPointer_NULL;
+
+    ERROR
+        RAISE ;
+    ENDPROC
+
+    !Allocate a data, set the data to recived RMQ message, and return pointer
+    LOCAL PROC RMQ_NEW(INOUT dataPointer pointer,VAR rmqmessage message)
+
+        VAR ioEvent data;
+        RMQGetMsgData message,data;
+
+        IF USE_LIST THEN
+            pointer:=NEW_("ioEvent");
+            ioEvent_set pointer,data;
+            RETURN ;
+        ENDIF
+
+        pointer:=ioEvent_(data);
+
+    ERROR
+        RAISE ;
+    ENDPROC
+
+    !Send RMQ message of this datatype
+    LOCAL PROC RMQ_send(INOUT dataPointer data,dataPointer queue,dataPointer code)
+        VAR ioEvent data_;
+        VAR string queue_;
+        VAR num code_;
+
+        VAR rmqslot slot;
+
+        data_:=ioEvent_get(data);
+        queue_:=string_get(queue);
+        code_:=num_get(code);
+
+        RMQFindSlot slot,queue_;
+        RMQSendMessage slot,data_\UserDef:=code_;
+
+    ERROR
+        RAISE ;
+    ENDPROC
+
+    LOCAL PROC ERASE(INOUT dataPointer pointer)
+        VAR string type;
+        VAR num chunk;
+        VAR num index;
+
+        type:=get_dataType_fromID(pointer.id\localIDChunk:=chunk\localID:=index);
+
+        IF type=DIGITAL_INPUT THEN
+            IF chunk=100 IDelete DI_Events1{index}.interrupt;
+            IF chunk=100 LIST_ioEvent_del DI_Events1\lenght:=DI_Events1_lenght,index;
+            IF chunk=200 IDelete DI_Events2{index}.interrupt;
+            IF chunk=200 LIST_ioEvent_del DI_Events2\lenght:=DI_Events2_lenght,index;
+            IF chunk=300 IDelete DI_Events3{index}.interrupt;
+            IF chunk=300 LIST_ioEvent_del DI_Events3\lenght:=DI_Events3_lenght,index;
+
+        ELSEIF type=DIGITAL_OUTPUT THEN
+            IF chunk=100 IDelete DO_Events1{index}.interrupt;
+            IF chunk=100 LIST_ioEvent_del DO_Events1\lenght:=DO_Events1_lenght,index;
+            IF chunk=200 IDelete DO_Events2{index}.interrupt;
+            IF chunk=200 LIST_ioEvent_del DO_Events2\lenght:=DO_Events2_lenght,index;
+            IF chunk=300 IDelete DO_Events3{index}.interrupt;
+            IF chunk=300 LIST_ioEvent_del DO_Events3\lenght:=DO_Events3_lenght,index;
+
+        ELSEIF type=ANALOG_INPUT THEN
+            IF chunk=100 IDelete AI_Events1{index}.interrupt;
+            IF chunk=100 LIST_ioEvent_del AI_Events1\lenght:=AI_Events1_lenght,index;
+
+        ELSEIF type=ANALOG_OUTPUT THEN
+            IF chunk=100 IDelete AO_Events1{index}.interrupt;
+            IF chunk=100 LIST_ioEvent_del AO_Events1\lenght:=AO_Events1_lenght,index;
+
+        ELSEIF type=GROUP_INPUT THEN
+            IF chunk=100 IDelete GI_Events1{index}.interrupt;
+            IF chunk=100 LIST_ioEvent_del GI_Events1\lenght:=GI_Events1_lenght,index;
+
+        ELSEIF type=GROUP_OUTPUT THEN
+            IF chunk=100 IDelete GO_Events1{index}.interrupt;
+            IF chunk=100 LIST_ioEvent_del GO_Events1\lenght:=GO_Events1_lenght,index;
+
+        ELSEIF type=DATA_PERS THEN
+            IF chunk=100 IDelete PERS_Events1{index}.interrupt;
+            IF chunk=100 LIST_ioEvent_del PERS_Events1\lenght:=PERS_Events1_lenght,index;
+            IF chunk=200 IDelete PERS_Events1{index}.interrupt;
+            IF chunk=200 LIST_ioEvent_del PERS_Events2\lenght:=PERS_Events2_lenght,index;
+
+        ELSE
+            !ERROR
+            errno_bookAndRaise ERR_IOEVENT_BAD_TYPE;
+        ENDIF
+
+    ERROR
+        RAISE ;
+    ENDPROC
+
+    !///////////////////////////////////////////////////////////////////////////
+    ! Privat Data Methods
+    !///////////////////////////////////////////////////////////////////////////
+
+    !Function used to determine where a ID adress is pointing
+    !Return value is the type (Di, Do ...)
+    !INOUT localIDChunk is what chunk (array of size 100)
+    !INOUT localID is where in said chunk/array
+    FUNC string get_dataType_fromID(num id\INOUT num localIDChunk\INOUT num localID)
+
+        VAR num chunk;
+        VAR num index;
+
+        index:=id MOD 100;
+        chunk:=(id MOD 1000)-index;
+
+        IF Present(localIDChunk) localIDChunk:=chunk;
+        IF Present(localID) localID:=index;
+
+        IF id<=ID_DOMAIN_DI errno_bookAndRaise ERR_BAD_DATA_POINTER;
+        IF id<=ID_DOMAIN_DO RETURN DIGITAL_INPUT;
+        IF id<=ID_DOMAIN_AI RETURN DIGITAL_OUTPUT;
+        IF id<=ID_DOMAIN_AO RETURN ANALOG_INPUT;
+        IF id<=ID_DOMAIN_GI RETURN ANALOG_OUTPUT;
+        IF id<=ID_DOMAIN_GO RETURN GROUP_INPUT;
+        IF id<=ID_DOMAIN_GO+10000 RETURN GROUP_OUTPUT;
+        errno_bookAndRaise ERR_BAD_DATA_POINTER;
+    ERROR
+        RAISE ;
+    ENDFUNC
+
+
+    !¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤
+    ! WRAPPER Methods
+    !¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤
+
+    !===========================================================================
+    ! Public Data Methods
+    !===========================================================================
+
+    !Enables IO events to be executed in the background (like during robot motion)
+    PROC ioEvent_executeInBackground()
+        allow_executeOutOfOrder:=TRUE;
+    ENDPROC
+
+    !Forces IO events to be executed sequentially (Default)
+    PROC ioEvent_executeInForeground()
+        allow_executeOutOfOrder:=TRUE;
+    ENDPROC
+
+    !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    ! Standardized Methods
+    !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    !%%%% DataPointer methods %%%%
+
+    !Set a datapointers value
+    PROC ioEvent_set(INOUT dataPointer pointer,ioEvent value)
+        VAR string type;
+        VAR num typeDomain;
+        VAR num chunk;
+        VAR num index;
+
+        VAR signaldi alias_DI;
+        VAR signaldo alias_DO;
+        VAR signalai alias_AI;
+        VAR signalao alias_AO;
+        VAR signalgi alias_GI;
+        VAR signalgo alias_GO;
+        VAR string signalName;
+        
+        !VAR dataPointer signalPointer;
+
+        !Set up new ioEvent
+        IF pointer.id<=0 THEN
+            IF value.signalType=DIGITAL_INPUT THEN
+
+                typeDomain:=ID_DOMAIN_DI;
+
+                !Set up Interrupt
+                signalName := value.signalName;
+                AliasIO signalName,alias_DI;
+
+                !Set up Data
+                IF DI_Events1_lenght<=DI_Events2_lenght THEN
+                    chunk:=1;
+                    LIST_ioEvent_append DI_Events1\lenght:=DI_Events1_lenght,value\index:=index;
+                    CONNECT DI_Events1{index}.interrupt WITH ioEvent_DI_handler1;
+                    !ISignalDI alias_DI,DI_Events1{index}.digital_TriggValue,DI_Events1{index}.interrupt;
+                    ISignalDI alias_DI,edge,DI_Events1{index}.interrupt;
+                ELSEIF DI_Events2_lenght<=DI_Events3_lenght THEN
+                    chunk:=2;
+                    LIST_ioEvent_append DI_Events2\lenght:=DI_Events2_lenght,value\index:=index;
+                    CONNECT DI_Events2{index}.interrupt WITH ioEvent_DI_handler2;
+                    !ISignalDI alias_DI,DI_Events2{index}.digital_TriggValue,DI_Events2{index}.interrupt;
+                    ISignalDI alias_DI,edge,DI_Events2{index}.interrupt;
+                ELSE
+                    chunk:=3;
+                    LIST_ioEvent_append DI_Events3\lenght:=DI_Events3_lenght,value\index:=index;
+                    CONNECT DI_Events3{index}.interrupt WITH ioEvent_DI_handler3;
+                    !ISignalDI alias_DI,DI_Events3{index}.digital_TriggValue,DI_Events3{index}.interrupt;
+                    ISignalDI alias_DI,edge,DI_Events3{index}.interrupt;
+                ENDIF
+
+            ELSEIF value.signalType=DIGITAL_OUTPUT THEN
+
+                typeDomain:=ID_DOMAIN_DO;
+
+                !Set up Interrupt
+                signalName := value.signalName;
+                AliasIO signalName,alias_DO;
+
+                !Set up Data
+                IF DO_Events1_lenght<=DO_Events2_lenght THEN
+                    chunk:=1;
+                    LIST_ioEvent_append DO_Events1\lenght:=DO_Events1_lenght,value\index:=index;
+                    CONNECT DO_Events1{index}.interrupt WITH ioEvent_DO_handler1;
+                    !ISignalDO alias_DO,DO_Events1{index}.digital_TriggValue,DO_Events1{index}.interrupt;
+                    ISignalDO alias_DO,edge,DO_Events1{index}.interrupt;
+                ELSEIF DO_Events2_lenght<=DO_Events3_lenght THEN
+                    chunk:=2;
+                    LIST_ioEvent_append DO_Events2\lenght:=DO_Events2_lenght,value\index:=index;
+                    CONNECT DO_Events2{index}.interrupt WITH ioEvent_DO_handler2;
+                    !ISignalDO alias_DO,DO_Events2{index}.digital_TriggValue,DO_Events2{index}.interrupt;
+                    ISignalDO alias_DO,edge,DO_Events2{index}.interrupt;
+                ELSE
+                    chunk:=3;
+                    LIST_ioEvent_append DO_Events3\lenght:=DO_Events3_lenght,value\index:=index;
+                    CONNECT DO_Events3{index}.interrupt WITH ioEvent_DO_handler3;
+                    !ISignalDO alias_DO,DO_Events3{index}.digital_TriggValue,DO_Events3{index}.interrupt;
+                    ISignalDO alias_DO,edge,DO_Events3{index}.interrupt;
+                ENDIF
+
+
+            ELSEIF value.signalType=ANALOG_INPUT THEN
+
+                typeDomain:=ID_DOMAIN_AI;
+
+                !Set up Interrupt
+                signalName := value.signalName;
+                AliasIO signalName,alias_AI;
+
+                !Set up Data
+                chunk:=1;
+                LIST_ioEvent_append AI_Events1\lenght:=AI_Events1_lenght,value\index:=index;
+                CONNECT AI_Events1{index}.interrupt WITH ioEvent_AI_handler1;
+
+                IF AI_Events1{index}.analog_DPos=TRUE AND AI_Events1{index}.analog_DNeg=FALSE THEN
+                    ISignalAI
+                    alias_AI,
+                    AI_Events1{index}.analog_Condition,
+                    AI_Events1{index}.analog_HighValue,
+                    AI_Events1{index}.analog_LowValue,
+                    AI_Events1{index}.analog_DeltaValue,
+                    \DPos,
+                    AI_Events1{index}.interrupt;
+                ELSEIF AI_Events1{index}.analog_DPos=FALSE AND AI_Events1{index}.analog_DNeg=TRUE THEN
+                    ISignalAI
+                    alias_AI,
+                    AI_Events1{index}.analog_Condition,
+                    AI_Events1{index}.analog_HighValue,
+                    AI_Events1{index}.analog_LowValue,
+                    AI_Events1{index}.analog_DeltaValue,
+                    \DNeg,
+                    AI_Events1{index}.interrupt;
+                ELSE
+                    ISignalAI
+                    alias_AI,
+                    AI_Events1{index}.analog_Condition,
+                    AI_Events1{index}.analog_HighValue,
+                    AI_Events1{index}.analog_LowValue,
+                    AI_Events1{index}.analog_DeltaValue,
+                    AI_Events1{index}.interrupt;
+                ENDIF
+
+            ELSEIF value.signalType=ANALOG_OUTPUT THEN
+
+                typeDomain:=ID_DOMAIN_AO;
+
+                !Set up Interrupt
+                signalName := value.signalName;
+                AliasIO signalName,alias_AO;
+
+                !Set up Data
+                chunk:=1;
+                LIST_ioEvent_append AO_Events1\lenght:=AO_Events1_lenght,value\index:=index;
+                CONNECT AO_Events1{index}.interrupt WITH ioEvent_AO_handler1;
+
+                IF AO_Events1{index}.analog_DPos=TRUE AND AO_Events1{index}.analog_DNeg=FALSE THEN
+                    ISignalAO
+                    alias_AO,
+                    AO_Events1{index}.analog_Condition,
+                    AO_Events1{index}.analog_HighValue,
+                    AO_Events1{index}.analog_LowValue,
+                    AO_Events1{index}.analog_DeltaValue,
+                    \DPos,
+                    AO_Events1{index}.interrupt;
+                ELSEIF AO_Events1{index}.analog_DPos=FALSE AND AO_Events1{index}.analog_DNeg=TRUE THEN
+                    ISignalAO
+                    alias_AO,
+                    AO_Events1{index}.analog_Condition,
+                    AO_Events1{index}.analog_HighValue,
+                    AO_Events1{index}.analog_LowValue,
+                    AO_Events1{index}.analog_DeltaValue,
+                    \DNeg,
+                    AO_Events1{index}.interrupt;
+                ELSE
+                    ISignalAO
+                    alias_AO,
+                    AO_Events1{index}.analog_Condition,
+                    AO_Events1{index}.analog_HighValue,
+                    AO_Events1{index}.analog_LowValue,
+                    AO_Events1{index}.analog_DeltaValue,
+                    AO_Events1{index}.interrupt;
+                ENDIF
+
+            ELSEIF value.signalType=GROUP_INPUT THEN
+
+                typeDomain:=ID_DOMAIN_GI;
+
+                !Set up Interrupt
+                signalName := value.signalName;
+                AliasIO signalName,alias_GI;
+
+                chunk:=1;
+                LIST_ioEvent_append GI_Events1\lenght:=GI_Events1_lenght,value\index:=index;
+                CONNECT GI_Events1{index}.interrupt WITH ioEvent_GI_handler1;
+                ISignalGI alias_GI,GI_Events1{index}.interrupt;
+
+            ELSEIF value.signalType=GROUP_OUTPUT THEN
+
+                typeDomain:=ID_DOMAIN_GO;
+
+                !Set up Interrupt
+                signalName := value.signalName;
+                AliasIO signalName,alias_GO;
+
+                chunk:=1;
+                LIST_ioEvent_append GO_Events1\lenght:=GO_Events1_lenght,value\index:=index;
+                CONNECT GO_Events1{index}.interrupt WITH ioEvent_GO_handler1;
+                ISignalGO alias_GO,GO_Events1{index}.interrupt;
+
+            ELSEIF value.signalType=DATA_PERS THEN
+
+                typeDomain:=ID_DOMAIN_PERS;
+
+                chunk:=1;
+                LIST_ioEvent_append PERS_Events1\lenght:=PERS_Events1_lenght,value\index:=index;
+
+            ELSE
+                !ERROR
+                errno_bookAndRaise ERR_IOEVENT_BAD_TYPE;
+            ENDIF
+
+            pointer.type:="ioEvent";
+            pointer.id:=typeDomain+(chunk*100)+index;
+
+        ENDIF
+
+        !Set initial value
+        !signalPointer.type := value.signalType;
+        !signalPointer.name := value.signalName;
+        !value.previousValue := getIO(signalPointer);
+        
+        type:="";
+        chunk:=0;
+        index:=0;
+
+        !Set the data of the ioEvent
+        type:=get_dataType_fromID(pointer.id\localIDChunk:=chunk\localID:=index);
+
+        IF type=DIGITAL_INPUT THEN
+            signalName := value.signalName;
+            AliasIO signalName,alias_DI;
+            IF chunk=100 DI_Events1{index}:=value;
+            IF chunk=100 DI_Events1{index}.previousValue:=alias_DI;
+            IF chunk=200 DI_Events2{index}:=value;
+            IF chunk=200 DI_Events2{index}.previousValue:=alias_DI;
+            IF chunk=300 DI_Events3{index}:=value;
+            IF chunk=300 DI_Events3{index}.previousValue:=alias_DI;
+
+        ELSEIF type=DIGITAL_OUTPUT THEN
+                signalName := value.signalName;
+            AliasIO signalName,alias_DO;
+            IF chunk=100 DO_Events1{index}:=value;
+            IF chunk=100 DO_Events1{index}.previousValue:=alias_DO;
+            IF chunk=200 DO_Events2{index}:=value;
+            IF chunk=200 DO_Events2{index}.previousValue:=alias_DO;
+            IF chunk=300 DO_Events3{index}:=value;
+            IF chunk=300 DO_Events3{index}.previousValue:=alias_DO;
+
+        ELSEIF type=ANALOG_INPUT THEN
+                signalName := value.signalName;
+            AliasIO signalName,alias_AI;
+            IF chunk=100 AI_Events1{index}:=value;
+            IF chunk=100 DO_Events1{index}.previousValue:=alias_AI;
+
+        ELSEIF type=ANALOG_OUTPUT THEN
+                signalName := value.signalName;
+            AliasIO signalName,alias_AO;
+            IF chunk=100 AO_Events1{index}:=value;
+            IF chunk=100 AO_Events1{index}.previousValue:=alias_AO;
+
+        ELSEIF type=GROUP_INPUT THEN
+                signalName := value.signalName;
+            AliasIO signalName,alias_GI;
+            IF chunk=100 GI_Events1{index}:=value;
+            IF chunk=100 GI_Events1{index}.previousValue:=GInput(alias_GI);
+
+        ELSEIF type=GROUP_OUTPUT THEN
+                signalName := value.signalName;
+            AliasIO signalName,alias_GO;
+            IF chunk=100 GO_Events1{index}:=value;
+            IF chunk=100 GO_Events1{index}.previousValue:=Goutput(alias_GO);
+
+        ELSEIF type=DATA_PERS THEN
+            IF chunk=100 PERS_Events1{index}:=value;
+            IF chunk=200 PERS_Events1{index}:=value;
+
+        ELSE
+            !ERROR
+            errno_bookAndRaise ERR_IOEVENT_BAD_TYPE;
+        ENDIF
+
+    ERROR
+        RAISE ;
+    ENDPROC
+
+    !Get a datapointers value
+    FUNC ioEvent ioEvent_get(dataPointer pointer)
+
+        VAR string type;
+        VAR num chunk;
+        VAR num index;
+
+        !Get the data of the ioEvent
+        type:=get_dataType_fromID(pointer.id\localIDChunk:=chunk\localID:=index);
+
+        IF type=DIGITAL_INPUT THEN
+            IF chunk=100 RETURN DI_Events1{index};
+            IF chunk=200 RETURN DI_Events2{index};
+            IF chunk=300 RETURN DI_Events3{index};
+
+        ELSEIF type=DIGITAL_OUTPUT THEN
+            IF chunk=100 RETURN DO_Events1{index};
+            IF chunk=200 RETURN DO_Events2{index};
+            IF chunk=300 RETURN DO_Events3{index};
+
+        ELSEIF type=ANALOG_INPUT THEN
+            IF chunk=100 RETURN AI_Events1{index};
+
+        ELSEIF type=ANALOG_OUTPUT THEN
+            IF chunk=100 RETURN AO_Events1{index};
+
+        ELSEIF type=GROUP_INPUT THEN
+            IF chunk=100 RETURN GI_Events1{index};
+
+        ELSEIF type=GROUP_OUTPUT THEN
+            IF chunk=100 RETURN GO_Events1{index};
+
+        ELSEIF type=DATA_PERS THEN
+            IF chunk=100 RETURN PERS_Events1{index};
+            IF chunk=200 RETURN PERS_Events1{index};
+
+        ELSE
+            !ERROR
+            errno_bookAndRaise ERR_IOEVENT_BAD_TYPE;
+        ENDIF
+    ERROR
+        RAISE ;
+    ENDFUNC
+
+    !Create a value-datapointer from a value, or that points to a value
+    FUNC dataPointer ioEvent_(ioEvent value\switch asReference)
+        VAR dataPointer pointer;
+        pointer.type:=Type(value);
+        IF Present(asReference) pointer.name:=ArgName(value);
+        IF NOT Present(asReference) pointer.value:=ValToStr(value);
+        RETURN pointer;
+    ERROR
+        RAISE ;
+    ENDFUNC
+
+
+    ! %%%% LIST methods %%%%
+
+    !Initialize new list
+    PROC LIST_ioEvent_NEW(
+        INOUT ioEvent list{*}
+        \INOUT num lenght)
+
+        FOR i FROM 1 TO Dim(list,1) DO
+            list{i}:=NULL;
+        ENDFOR
+
+        lenght:=0;
+
+    ENDPROC
+
+    !Append a datapointer to the list
+    !The optional argument index will be set to the index that was used
+    PROC LIST_ioEvent_append(
+        INOUT ioEvent list{*}
+        \INOUT num lenght,
+        ioEvent item
+        \INOUT num index)
+
+        IF NOT Present(lenght) THEN
+            FOR i FROM 1 TO Dim(list,1) DO
+                IF list{i}=NULL THEN
+                    list{i}:=item;
+                    IF Present(index) index:=i;
+                    RETURN ;
+                ENDIF
+            ENDFOR
+            RETURN ;
+        ENDIF
+
+        lenght:=lenght+1;
+        list{lenght}:=item;
+        index:=lenght;
+
+    ERROR
+        RAISE ;
+    ENDPROC
+
+    !Pop the last data pointer in the list
+    !Or if index is specified, pops the index
+    FUNC ioEvent LIST_ioEvent_pop(
+        INOUT ioEvent list{*}
+        \INOUT num lenght,
+        \num index)
+
+        VAR ioEvent item;
+
+        !Pop at spesific index
+        IF Present(index) THEN
+            item:=list{index};
+            list{index}:=NULL;
+            LIST_ioEvent_del list\lenght?lenght,index;
+            RETURN item;
+        ENDIF
+
+        !Pop at last index, without lenght
+        IF NOT Present(lenght) THEN
+            FOR i FROM Dim(list,1) TO 1 DO
+                IF list{i}<>NULL THEN
+                    item:=list{i};
+                    list{i}:=NULL;
+                    RETURN item;
+                ENDIF
+            ENDFOR
+        ENDIF
+
+        !Pop at last index, with lenght
+        item:=list{lenght};
+        list{lenght}:=NULL;
+        lenght:=lenght-1;
+        RETURN item;
+
+    ERROR
+        RAISE ;
+    ENDFUNC
+
+    !Delete an item at a position of the list
+    PROC LIST_ioEvent_del(
+        INOUT ioEvent list{*}
+        \INOUT num lenght,
+        num index)
+
+        list{index}:=NULL;
+
+        !Shift down the above items to close gap, without lenght
+        IF NOT Present(lenght) THEN
+            FOR i FROM index TO Dim(list,1)-1 DO
+                list{index}:=list{index+1};
+            ENDFOR
+            list{Dim(list,1)}:=NULL;
+            RETURN ;
+        ENDIF
+
+        !Shift down the above items to close gap, with lenght
+        FOR i FROM index TO lenght-1 DO
+            list{index}:=list{index+1};
+        ENDFOR
+        list{lenght}:=NULL;
+
+    ERROR
+        RAISE ;
+    ENDPROC
+
+    !Returns the number of items actively used in the list
+    FUNC num LIST_ioEvent_lenght(INOUT ioEvent list{*})
+        VAR num lenght;
+        lenght:=0;
+
+        FOR i FROM 1 TO Dim(list,1) DO
+            IF list{i}<>NULL THEN
+                lenght:=lenght+1;
+            ENDIF
+        ENDFOR
+
+        RETURN lenght;
+    ERROR
+        RAISE ;
+    ENDFUNC
+
+
+ENDMODULE

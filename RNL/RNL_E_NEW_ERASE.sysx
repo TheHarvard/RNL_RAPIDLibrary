@@ -1,0 +1,126 @@
+MODULE RNL_E_NEW_ERASE(SYSMODULE)
+
+    !This module containst the NEW and ERASE methods.
+    !Theese methods are wrappers that enable dynamic data allocation.
+
+    VAR errnum ERR_BAD_DATA_TYPE:=-1;
+
+    PROC NEW_FROM_RMQ(INOUT dataPointer pointer,dataPointer type)
+        pointer:=NEW(string_get(type));
+    ENDPROC
+
+    FUNC dataPointer NEW_(
+        dataType type
+        \VAR rmqmessage RMQ_message
+        |dictionary initialValues{*}
+        |rmqQueue inRMQqueue
+        \dataPointer self)
+
+        RETURN NEW(
+        type
+        \RMQ_message?RMQ_message
+        \initialValues?initialValues
+        \inRMQqueue?inRMQqueue
+        \self?self);
+
+    ENDFUNC
+
+    FUNC dataPointer NEW(
+        dataType type
+        \VAR rmqmessage RMQ_message
+        |dictionary initialValues{*}
+        \rmqQueue inRMQqueue
+        \dataPointer self)
+
+        VAR rmqCode_id rmqID;
+
+        VAR dataPointer pointer;
+        pointer.type:=type;
+
+        !IF a rmq location is specified, allocate the data there instead
+        IF Present(inRMQqueue) THEN
+            IF inRMQqueue<>rmqQueue_NULL AND inRMQqueue<>rmqQueue_SELF() THEN
+                try \in_RMQ:=inRMQqueue, "NEW_FROM_RMQ"
+                \arg1_INOUT:=pointer \arg2:=string_(type)\trowError;
+                RETURN pointer;
+            ENDIF
+        ENDIF
+        
+        !Check if the correct module is loaded
+        IF NOT ModExist("RNL__"+pointer.type) THEN
+            !Load Module
+            Stop;
+            Load diskhome\File:="RNL__"+pointer.type;
+        ENDIF
+
+        !Call the NEW constructor of the spesific datatype
+        IF Present(RMQ_message) THEN
+            %"RNL__"+pointer.type+":RMQ_NEW"%pointer,RMQ_message;
+        ELSE
+            %"RNL__"+pointer.type+":NEW"%pointer\self?self;
+        ENDIF
+
+        IF Present(initialValues) THEN
+            !Set up initial values
+            FOR i FROM 1 TO Dim(initialValues,1) DO
+                try\obj:=pointer,"set"+initialValues{i}.key
+                \arg1:=initialValues{i}.value
+                \trowError;
+            ENDFOR
+        ENDIF
+        
+!        !IF a rmq location is specified, allocate the data there instead
+!        IF Present(inRMQqueue) THEN
+!            IF inRMQqueue<>rmqQueue_NULL AND inRMQqueue<>rmqQueue_SELF() THEN
+!                rmqID:=RMQ_start(inRMQqueue,pointer\allocate);
+!                ERASE pointer;
+!                pointer:=RMQ_wait(rmqID);
+!                RETURN pointer;
+!            ENDIF
+!        ENDIF
+
+        RETURN pointer;
+
+    ERROR
+        IF ERRNO=ERR_REFUNKDAT
+        OR ERRNO=ERR_REFUNKFUN
+        OR ERRNO=ERR_REFUNKPRC
+        OR ERRNO=ERR_CALLPROC
+        THEN
+            SkipWarn;
+            BookErrNo ERR_BAD_DATA_TYPE;
+            RAISE ERR_BAD_DATA_TYPE;
+        ENDIF
+        RAISE ;
+    ENDFUNC
+
+    PROC ERASE_(INOUT dataPointer data)
+
+        ERASE data;
+
+    ENDPROC
+
+    PROC ERASE(INOUT dataPointer data)
+
+        !If data is NULL then return early
+        IF data=dataPointer_NULL RETURN ;
+
+        try\obj:=data,"ERASE"\trowError;
+
+    ENDPROC
+
+    !This function only serves the purpose of making a NEW call look
+    !More readable when you don't want to save the pointer.
+    PROC CREATE(dataPointer pointer)
+        IF NOT (main_isInConfig() OR main_isInInit()) THEN
+            !This CREATE was called in the main program, indicating that
+            !A NEW call was made where the pointer was not saved.
+            !It is impossible to ERASE this data, and it could be a 
+            !Memory leak
+            ErrWrite\I,"CREATE Was used outside of config() and init()",
+                "Don't use the NEW method to dynamically allocate data"
+            \RL2:="unless the data is de-allocated with the ERASE method later";
+        ENDIF
+    ENDPROC
+
+ENDMODULE

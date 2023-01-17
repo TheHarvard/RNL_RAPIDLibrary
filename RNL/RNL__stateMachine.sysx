@@ -1,0 +1,702 @@
+MODULE RNL__stateMachine(SYSMODULE)
+    
+    !THIS MODULE IS NOT UP TO DAT AND CAN NOT BE INHERITED FROM
+    
+    
+    
+
+    !stateMachine is an object that enables a event driven state machine structure
+
+    !dependecies
+    ! - dataPointer
+    ! - event
+    ! - unixTime
+    ! - logging (To be implemented...)
+
+    !Inherits from
+    ! - none
+
+    !***************************************************************************
+    ! Data
+    !***************************************************************************
+
+    ALIAS string state;
+
+    RECORD stateMachine
+        dataPointer self;
+        state mainState;
+        state currentState;
+        unixTime timestamp_lastUpdate;
+        stateMachine_stateBuffer suspendBuffer;
+    ENDRECORD
+
+    RECORD stateTransition
+        bool done;
+        bool continue;
+        state changeto;
+        state suspendFor;
+        string reason;
+    ENDRECORD
+
+    RECORD stateInfo
+        dataPointer self;
+        stateTransition transition;
+        eventInfo eInfo;
+    ENDRECORD
+
+    RECORD stateMachine_stateBuffer
+        state state_1;
+        state state_2;
+        state state_3;
+        state state_4;
+        state state_5;
+    ENDRECORD
+
+    !Per module setting for whether the list should be used
+    !IF this bool is set to false (default) then the NEW keyword will
+    !will create a stirng value datapointer for this datatype.
+    !If it is set to true, then the NEW keyword will use the pre declared list.
+    LOCAL CONST bool USE_LIST:=TRUE;
+
+    !Null constants
+    CONST stateMachine stateMachine_NULL:=[["","",0,"","",0,""],"","",0,["","","","",""]];
+    LOCAL CONST stateMachine stateMachine_DEFAULT:=[["","",0,"","",0,""],"","",0,["","","","",""]];
+    LOCAL CONST stateMachine NULL:=[["","",0,"","",0,""],"","",0,["","","","",""]];
+
+    CONST stateTransition stateTransition_NULL:=[FALSE,FALSE,"","",""];
+
+
+    CONST state state_NULL:="";
+
+
+    !Pre delcared list to be dynamically allocated
+    LOCAL VAR stateMachine list{200};
+    LOCAL VAR num list_lenght:=0;
+
+    !Dimention numbers should reflect the size of the record data
+    CONST num stateMachine_stateBuffer_DIM:=5;
+
+    !regular events:
+    PERS event onStart:=[100001];
+    PERS event onUpdate:=[100002];
+    PERS event onEnd:=[100003];
+    PERS event onSuspend:=[100004];
+    PERS event onResume:=[100005];
+    
+    !other events
+    PERS event event_currentState_changed;
+
+    !###########################################################################
+    ! NEW Constructor and ERASE Destructor
+    !###########################################################################
+
+    !NEW constructor with initial values
+    FUNC dataPointer NEW_stateMachine(
+        \state mainState
+        )
+        VAR dataPointer pointer;
+        VAR stateMachine data;
+
+        data:=stateMachine_DEFAULT;
+
+        !Add initial data
+        IF Present(mainState) data.mainState:=mainState;
+
+        !Allocate and set data
+        NEW pointer;
+        stateMachine_set pointer,data;
+        RETURN pointer;
+    ENDFUNC
+
+    !Allocate a data and return pointer
+    LOCAL PROC NEW(INOUT dataPointer pointer)
+        VAR stateMachine data;
+
+        IF USE_LIST THEN
+            pointer.type:=Type(list);
+            LIST_stateMachine_append list\lenght:=list_lenght,data\index:=pointer.id;
+            RETURN ;
+        ENDIF
+
+        pointer:=stateMachine_(stateMachine_NULL);
+
+    ERROR
+        RAISE ;
+    ENDPROC
+
+    !Resolve an RMQ_execute command for this datatype. Return result
+    LOCAL PROC RMQ_execute(INOUT dataPointer pointer,VAR rmqmessage message)
+        VAR stateMachine data;
+        RMQGetMsgData message,data;
+
+        !Add custom behavior for this datatype here
+        pointer:=dataPointer_NULL;
+
+    ERROR
+        RAISE ;
+    ENDPROC
+
+    !Allocate a data, set the data to recived RMQ message, and return pointer
+    LOCAL PROC RMQ_NEW(INOUT dataPointer pointer,VAR rmqmessage message)
+
+        VAR stateMachine data;
+        RMQGetMsgData message,data;
+
+        IF USE_LIST THEN
+            NEW pointer;
+            stateMachine_set pointer,data;
+            RETURN ;
+        ENDIF
+
+        pointer:=stateMachine_(data);
+
+    ERROR
+        RAISE ;
+    ENDPROC
+
+    !Send RMQ message of this datatype
+    LOCAL PROC RMQ_send(INOUT dataPointer data,dataPointer queue,dataPointer code)
+        VAR stateMachine data_;
+        VAR string queue_;
+        VAR num code_;
+
+        VAR rmqslot slot;
+
+        data_:=stateMachine_get(data);
+        queue_:=string_get(queue);
+        code_:=num_get(code);
+
+        rmqfindslot slot,queue_;
+        RMQSendMessage slot,data_\UserDef:=code_;
+
+    ERROR
+        RAISE ;
+    ENDPROC
+
+    LOCAL PROC ERASE(INOUT dataPointer pointer)
+        IF dataPointer_isReference(pointer) stateMachine_set pointer,NULL;
+        IF dataPointer_isIndex(pointer) LIST_stateMachine_del list\lenght:=list_lenght,pointer.id;
+        pointer:=dataPointer_NULL;
+    ERROR
+        RAISE ;
+    ENDPROC
+
+    !///////////////////////////////////////////////////////////////////////////
+    ! Privat Object Methods
+    !///////////////////////////////////////////////////////////////////////////
+
+    !Executes the current state in the state machine, in response to an event
+    LOCAL PROC executeState(
+            dataPointer machine,
+            INOUT dataPointer transition,
+            dataPointer eventNote)
+
+        VAR stateMachine machine_;
+
+        VAR stateInfo info;
+        VAR eventInfo eventNote_;
+        VAR stateTransition transition_;
+
+        GetDataVal machine.name,machine_;
+
+        errFromBool StrToVal(eventNote.value,eventNote_),ERR_SYM_ACCESS;
+        errFromBool StrToVal(transition.value,transition_),ERR_SYM_ACCESS;
+
+        !Logg event, value and state
+
+        !ADD CODE HERE THAT LOGS THE EVENT, EVENT VALUE, AND STATE
+
+        !Call current state with the event notification, returning the stateTransition
+        info.transition:=transition_;
+        info.eInfo:=eventNote_;
+        info.self:=machine_.self;
+        %machine_.currentState %info;
+
+        !Save stateTransition through INOUT argument
+        transition_:=info.transition;
+        transition.value:=ValToStr(transition_);
+
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !Executes a state transition, changing current state and calling regular events
+    LOCAL PROC executeStateTransition(
+            dataPointer machine,
+            INOUT dataPointer transition)
+
+        VAR stateMachine machine_;
+        VAR stateTransition transition_;
+        !VAR dataPointer mode;
+        !VAR executionMode mode_;
+
+        VAR eventInfo eInfo;
+        VAR dataPointer eInfo_;
+
+        GetDataVal machine.name,machine_;
+        errFromBool StrToVal(transition.value,transition_),ERR_SYM_ACCESS;
+
+        eInfo_:=NEW_("eventInfo");
+
+        !Get execution mode
+        !try\obj:=machine_.self,"getExeMode"\arg1_INOUT:=mode;
+        !errFromBool StrToVal(mode.value,mode_),ERR_SYM_ACCESS;
+
+        !Logg changes and reason
+
+        !ADD CODE HERE THAT LOGS THE TRANSITION AND REASON
+
+        IF transition_.continue=TRUE THEN
+
+            !No change in state
+            machine_.currentState:=machine_.currentState;
+
+        ELSEIF transition_.changeto<>state_NULL THEN
+
+            !Change to new state
+
+            !Call onEnd on last state
+            eInfo.triggerEvent:=onEnd;
+            eventInfo_set eInfo_,eInfo;
+            try\obj:=machine,"executeEvent",\arg1:=eInfo_\trowError;
+
+            !Change State
+            machine_.currentState:=transition_.changeto;
+
+            !Syncronize changes
+            SetDataVal machine.name,machine_;
+            GetDataVal machine.name,machine_;
+
+            !Call onStart on the new state
+            eInfo.triggerEvent:=onStart;
+            eventInfo_set eInfo_,eInfo;
+            try\obj:=machine,"executeEvent",\arg1:=eInfo_\trowError;
+            
+            !Notify subscribers of the new state
+            TRIGGER \object:=machine, event_currentState_changed;
+
+        ELSEIF transition_.suspendFor<>state_NULL THEN
+
+            !Suspend for new state
+
+            !Call onSuspend on last state
+            eInfo.triggerEvent:=onSuspend;
+            eventInfo_set eInfo_,eInfo;
+            try\obj:=machine,"executeEvent",\arg1:=eInfo_\trowError;
+
+            !append current state to suspendbuffer
+            stateMachine_stateBuffer_append machine_.suspendBuffer,machine_.currentState;
+
+            !Change State
+            machine_.currentState:=transition_.suspendFor;
+
+            !Syncronize changes
+            SetDataVal machine.name,machine_;
+            GetDataVal machine.name,machine_;
+
+            !Call onStart on the new state
+            eInfo.triggerEvent:=onStart;
+            eventInfo_set eInfo_,eInfo;
+            try\obj:=machine,"executeEvent",\arg1:=eInfo_;
+
+
+        ELSEIF transition_.done=TRUE THEN
+
+            !Complete state and resume to suspended state
+
+            !Call onEnd on last state
+            eInfo.triggerEvent:=onEnd;
+            eventInfo_set eInfo_,eInfo;
+            try\obj:=machine,"executeEvent",\arg1:=eInfo_;
+
+            !Change State, to topmost state in suspend buffer
+            machine_.currentState:=stateMachine_stateBuffer_pop(machine_.suspendBuffer);
+
+            !Syncronize changes
+            SetDataVal machine.name,machine_;
+            GetDataVal machine.name,machine_;
+
+            !Call onResume on the resumed state
+            eInfo.triggerEvent:=onResume;
+            eventInfo_set eInfo_,eInfo;
+            try\obj:=machine,"executeEvent",\arg1:=eInfo_\trowError;
+
+        ENDIF
+
+        !Clean up pointer
+        ERASE eInfo_;
+
+        !Push changes
+        SetDataVal machine.name,machine_;
+
+
+    ENDPROC
+
+    !Setting an index in a list
+    LOCAL PROC stateMachine_stateBuffer_set(INOUT stateMachine_stateBuffer list,num i,state s)
+        TEST i
+        CASE 1:
+            list.state_1:=s;
+        CASE 2:
+            list.state_2:=s;
+        CASE 3:
+            list.state_3:=s;
+        CASE 4:
+            list.state_4:=s;
+        CASE 5:
+            list.state_5:=s;
+        DEFAULT:
+            !ERROR
+            ErrWrite "stateMachine_stateBuffer_get out of range","i is out of range";
+            Stop;
+        ENDTEST
+    ENDPROC
+
+    !Getting an index in a list
+    LOCAL FUNC state stateMachine_stateBuffer_get(INOUT stateMachine_stateBuffer list,num i)
+        TEST i
+        CASE 1:
+            RETURN list.state_1;
+        CASE 2:
+            RETURN list.state_2;
+        CASE 3:
+            RETURN list.state_3;
+        CASE 4:
+            RETURN list.state_4;
+        CASE 5:
+            RETURN list.state_5;
+        DEFAULT:
+            !ERROR
+            ErrWrite "stateMachine_stateBuffer_set out of range","i is out of range";
+            Stop;
+        ENDTEST
+    ENDFUNC
+
+    !Appending an item to a list
+    LOCAL PROC stateMachine_stateBuffer_append(INOUT stateMachine_stateBuffer list,state item)
+        FOR i FROM 1 TO stateMachine_stateBuffer_DIM DO
+            IF stateMachine_stateBuffer_get(list,i)=state_NULL THEN
+                stateMachine_stateBuffer_set list,i,item;
+                RETURN ;
+            ENDIF
+        ENDFOR
+    ENDPROC
+
+    !Popping an item from a list
+    LOCAL FUNC state stateMachine_stateBuffer_pop(INOUT stateMachine_stateBuffer list)
+        VAR state returnItem;
+        FOR i FROM stateMachine_stateBuffer_DIM TO 1 DO
+            returnItem:=stateMachine_stateBuffer_get(list,i);
+            IF returnItem<>state_NULL THEN
+                stateMachine_stateBuffer_set list,i,state_NULL;
+                RETURN returnItem;
+            ENDIF
+        ENDFOR
+    ENDFUNC
+
+    !---------------------------------------------------------------------------
+    ! Auxiliary Methods
+    !---------------------------------------------------------------------------
+
+    !State transitions
+    !argument "string reason" is a required debug string that will be logged
+    !example: stateChangeTo(ProgramStop,"Stop command was given") becomes:
+    ! " [stateMachine] Moved to state "ProgramStop" because "Stop command was given". "
+
+    !No change in state. This state will be called next time an event occurs
+    PROC CONTINUE(INOUT stateInfo info)
+        info.transition:=stateTransition_NULL;
+        info.transition.continue:=TRUE;
+    ENDPROC
+
+    !Change to new state. The new state will be called next time an event occurs
+    !The old state will get one last event call with "OnEnd", and the new
+    !state will be called once with the event "OnStart"
+    PROC CHANGE_TO(INOUT stateInfo info,state newState,string reason)
+        info.transition:=stateTransition_NULL;
+        info.transition.changeto:=newState;
+    ENDPROC
+
+    !Temporarily changes to new state. The new state will be called next time an event occurs
+    !The old state will get one last event call with "OnSuspend", and the new
+    !state will be called once with the event "OnStart".
+    !The old state is saved in a queue, and can be resumed at a later time
+    PROC SUSPEND_FOR(INOUT stateInfo info,state newState,string reason)
+        info.transition:=stateTransition_NULL;
+        info.transition.suspendFor:=newState;
+    ENDPROC
+
+    !Change to the last state that was suspended. 
+    !The suspended (now unsuspended) state will be called next time an event occurs.
+    !the old state will be called one last time with the event "OnEnd".
+    !the suspended (now unsuspended) state will be called once with the event "OnResume".
+    PROC DONE(INOUT stateInfo info,string reason)
+        info.transition:=stateTransition_NULL;
+        info.transition.done:=TRUE;
+    ENDPROC
+
+    !¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤
+    ! WRAPPER Methods
+    !¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤
+
+    PROC setMainState_(dataPointer object,state mainState)
+        try\obj:=object,"setMainState"\arg1:=string_(mainState)\trowError;
+    ENDPROC
+
+    FUNC state getMainState_(dataPointer object)
+        VAR dataPointer returnPointer;
+        try\obj:=object,"setMainState"\arg1:=returnPointer\trowError;
+        RETURN string_get(returnPointer);
+    ENDFUNC
+
+    PROC setCurrentState_(dataPointer object,state currentState)
+        try\obj:=object,"setCurrentState"\arg1:=string_(currentState)\trowError;
+    ENDPROC
+
+    FUNC state getCurrentState_(dataPointer object)
+        VAR dataPointer returnPointer;
+        try\obj:=object,"getCurrentState"\arg1:=returnPointer\trowError;
+        RETURN string_get(returnPointer);
+    ENDFUNC
+
+    !===========================================================================
+    ! Public Data Methods
+    !===========================================================================
+
+    !Procedure used to recive events
+    !All events that should reach the state machine should be sent here
+    LOCAL PROC event_handler(dataPointer machine,dataPointer eventNote)
+        VAR stateMachine machine_;
+        VAR dataPointer transition;
+
+        GetDataVal machine.name,machine_;
+
+        transition.value:=valToStr(stateTransition_NULL);
+
+        !Execute state, and recive state transition
+        try\obj:=machine_.self,"executeState"\arg1_INOUT:=transition\arg2:=eventNote\trowError;
+
+        !Execute state transition
+        try\obj:=machine_.self,"executeStateTransition"\arg1_INOUT:=transition\trowError;
+
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+    ! Getter and Setter Methods
+    !&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+
+    LOCAL PROC setMainState(dataPointer pointer, dataPointer mainState)
+        VAR stateMachine object;
+        object := stateMachine_get(pointer);
+        object.mainState := string_get(mainState);
+        stateMachine_set pointer,object;
+    ENDPROC
+    
+
+    !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    ! Standardized Methods
+    !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    !%%%% DataPointer methods %%%%
+
+    !Set a datapointers value
+    PROC stateMachine_set(INOUT dataPointer pointer,stateMachine value)
+        IF dataPointer_isReference(pointer) SetDataVal pointer.name,value;
+        IF dataPointer_isReference(pointer) RETURN ;
+        IF dataPointer_isValue(pointer) pointer.value:=ValToStr(value);
+        IF dataPointer_isValue(pointer) RETURN ;
+        IF dataPointer_isIndex(pointer) list{pointer.id}:=value;
+        IF dataPointer_isIndex(pointer) RETURN ;
+        !ERROR
+        !Data Pointer Not set up
+        errno_bookAndRaise ERR_BAD_DATA_POINTER;
+    ERROR
+        RAISE ;
+    ENDPROC
+
+    !Get a datapointers value
+    FUNC stateMachine stateMachine_get(dataPointer pointer)
+        VAR stateMachine returnValue;
+        returnValue:=NULL;
+        IF dataPointer_isReference(pointer) GetDataVal pointer.name,returnValue;
+        IF dataPointer_isValue(pointer) errFromBool StrToVal(pointer.value,returnValue),ERR_SYM_ACCESS;
+        IF dataPointer_isIndex(pointer) returnValue:=list{pointer.id};
+        RETURN returnValue;
+    ERROR
+        RAISE ;
+    ENDFUNC
+
+    !Create a value-datapointer from a value, or that points to a value
+    FUNC dataPointer stateMachine_(stateMachine value\switch asReference)
+        VAR dataPointer pointer;
+        pointer.type:=Type(value);
+        IF Present(asReference) pointer.name:=ArgName(value);
+        IF NOT Present(asReference) pointer.value:=ValToStr(value);
+        RETURN pointer;
+    ERROR
+        RAISE ;
+    ENDFUNC
+
+
+    ! %%%% LIST methods %%%%
+
+    !Initialize new list
+    PROC LIST_stateMachine_NEW(
+        INOUT stateMachine list{*}
+        \INOUT num lenght)
+
+        FOR i FROM 1 TO Dim(list,1) DO
+            list{i}:=NULL;
+        ENDFOR
+
+        lenght:=0;
+
+    ENDPROC
+
+    !Append a datapointer to the list
+    !The optional argument index will be set to the index that was used
+    PROC LIST_stateMachine_append(
+        INOUT stateMachine list{*}
+        \INOUT num lenght,
+        stateMachine item
+        \INOUT num index)
+
+        IF NOT Present(lenght) THEN
+            FOR i FROM 1 TO Dim(list,1) DO
+                IF list{i}=NULL THEN
+                    list{i}:=item;
+                    IF Present(index) index:=i;
+                    RETURN ;
+                ENDIF
+            ENDFOR
+            RETURN ;
+        ENDIF
+
+        lenght:=lenght+1;
+        list{lenght}:=item;
+        index:=lenght;
+
+    ERROR
+        RAISE ;
+    ENDPROC
+
+    !Pop the last data pointer in the list
+    !Or if index is specified, pops the index
+    FUNC stateMachine LIST_stateMachine_pop(
+        INOUT stateMachine list{*}
+        \INOUT num lenght,
+        \num index)
+
+        VAR stateMachine item;
+
+        !Pop at spesific index
+        IF Present(index) THEN
+            item:=list{index};
+            list{index}:=NULL;
+            LIST_stateMachine_del list\lenght?lenght,index;
+            RETURN item;
+        ENDIF
+
+        !Pop at last index, without lenght
+        IF NOT Present(lenght) THEN
+            FOR i FROM Dim(list,1) TO 1 DO
+                IF list{i}<>NULL THEN
+                    item:=list{i};
+                    list{i}:=NULL;
+                    RETURN item;
+                ENDIF
+            ENDFOR
+        ENDIF
+
+        !Pop at last index, with lenght
+        item:=list{lenght};
+        list{lenght}:=NULL;
+        lenght:=lenght-1;
+        RETURN item;
+
+    ERROR
+        RAISE ;
+    ENDFUNC
+
+    !Delete an item at a position of the list
+    PROC LIST_stateMachine_del(
+        INOUT stateMachine list{*}
+        \INOUT num lenght,
+        num index)
+
+        list{index}:=NULL;
+
+        !Shift down the above items to close gap, without lenght
+        IF NOT Present(lenght) THEN
+            FOR i FROM index TO Dim(list,1)-1 DO
+                list{index}:=list{index+1};
+            ENDFOR
+            list{Dim(list,1)}:=NULL;
+            RETURN ;
+        ENDIF
+
+        !Shift down the above items to close gap, with lenght
+        FOR i FROM index TO lenght-1 DO
+            list{index}:=list{index+1};
+        ENDFOR
+        list{lenght}:=NULL;
+
+    ERROR
+        RAISE ;
+    ENDPROC
+
+    !Returns the number of items actively used in the list
+    FUNC num LIST_stateMachine_lenght(INOUT stateMachine list{*})
+        VAR num lenght;
+        lenght:=0;
+
+        FOR i FROM 1 TO Dim(list,1) DO
+            IF list{i}<>NULL THEN
+                lenght:=lenght+1;
+            ENDIF
+        ENDFOR
+
+        RETURN lenght;
+    ERROR
+        RAISE ;
+    ENDFUNC
+
+    !xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    ! Examples
+    !xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+    !exampleState is a example of how a state should be declared
+    PROC exampleState(INOUT stateInfo info)
+        TEST info.eInfo.triggerEvent
+
+        CASE onStart:
+            CONTINUE info;
+
+        CASE onUpdate:
+            CONTINUE info;
+            CHANGE_TO info,"newState","This is the reason for changing to a new state";
+            SUSPEND_FOR info,"newState","This is the reason for suspending this stat for the next";
+            DONE info,"This is the reason for this state beeing done";
+
+        CASE onEnd:
+            CONTINUE info;
+
+        CASE onSuspend:
+            CONTINUE info;
+
+        CASE onResume:
+            CONTINUE info;
+
+        DEFAULT:
+            CONTINUE info;
+
+        ENDTEST
+
+    ERROR
+        CONTINUE info;
+        RAISE ;
+    ENDPROC
+
+ENDMODULE

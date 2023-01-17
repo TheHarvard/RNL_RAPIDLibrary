@@ -1,0 +1,181 @@
+MODULE RNL_E_IO(SYSMODULE)
+
+    !This module wraps the standard IO methods for datapointer.
+
+    !ERRNUM codes
+    VAR errnum ERR_NOT_A_SIGNAL:=-1;
+    VAR errnum ERR_SIGNAL_NOT_SUPPORTED:=-1;
+
+
+    !Datapointer constructors
+
+    FUNC dataPointer signaldi_(VAR signaldi value)
+        VAR dataPointer pointer;
+        pointer.type:=Type(value);
+        pointer.name:=ArgName(value);
+        RETURN pointer;
+    ENDFUNC
+
+    FUNC dataPointer signaldo_(VAR signaldo value)
+        VAR dataPointer pointer;
+        pointer.type:=Type(value);
+        pointer.name:=ArgName(value);
+        RETURN pointer;
+    ENDFUNC
+
+    FUNC dataPointer signalai_(VAR signalai value)
+        VAR dataPointer pointer;
+        pointer.type:=Type(value);
+        pointer.name:=ArgName(value);
+        RETURN pointer;
+    ENDFUNC
+
+    FUNC dataPointer signalao_(VAR signalao value)
+        VAR dataPointer pointer;
+        pointer.type:=Type(value);
+        pointer.name:=ArgName(value);
+        RETURN pointer;
+    ENDFUNC
+
+    FUNC dataPointer signalgi_(VAR signalgi value)
+        VAR dataPointer pointer;
+        pointer.type:=Type(value);
+        pointer.name:=ArgName(value);
+        RETURN pointer;
+    ENDFUNC
+
+    FUNC dataPointer signalgo_(VAR signalgo value)
+        VAR dataPointer pointer;
+        pointer.type:=Type(value);
+        pointer.name:=ArgName(value);
+        RETURN pointer;
+    ENDFUNC
+
+
+    !Sets an IO
+    PROC setIO(dataPointer signal,num value\num Delay|switch Sync)
+        VAR signaldi ALIAS_di;
+        VAR signaldo ALIAS_do;
+        VAR signalai ALIAS_ai;
+        VAR signalao ALIAS_ao;
+        VAR signalgi ALIAS_gi;
+        VAR signalgo ALIAS_go;
+        VAR string signalName;
+
+        BookErrNo ERR_NOT_A_SIGNAL;
+        BookErrNo ERR_SIGNAL_NOT_SUPPORTED;
+
+        TEST signal.type
+
+        CASE Type(ALIAS_di):
+            RAISE ERR_SIGNAL_NOT_SUPPORTED;
+        CASE Type(ALIAS_do):
+            signalName:=signal.name;
+            AliasIO signalName,ALIAS_do;
+            !SetDO\SDelay?Delay,\Sync?Sync,ALIAS_do,value;
+            !RW7 no longer supports \Sync. Raise error instead.
+            IF Present(Sync) RAISE ERR_INVALID_ARGUMENTS;
+            SetDO\SDelay?Delay,ALIAS_do,value;
+
+        CASE Type(ALIAS_ai):
+            RAISE ERR_SIGNAL_NOT_SUPPORTED;
+        CASE Type(ALIAS_ao):
+            IF Present(Delay) OR Present(Sync) RAISE ERR_INVALID_ARGUMENTS;
+            signalName:=signal.name;
+            AliasIO signalName,ALIAS_ao;
+            SetAO ALIAS_ao,value;
+
+        CASE Type(ALIAS_gi):
+            RAISE ERR_SIGNAL_NOT_SUPPORTED;
+        CASE Type(ALIAS_go):
+            IF Present(Sync) RAISE ERR_INVALID_ARGUMENTS;
+            signalName:=signal.name;
+            AliasIO signalName,ALIAS_go;
+            SetGO\SDelay?Delay,ALIAS_go,value;
+
+        DEFAULT:
+            RAISE ERR_NOT_A_SIGNAL;
+        ENDTEST
+
+    ERROR
+        IF ERRNO=ERR_NOT_A_SIGNAL RAISE ;
+        IF ERRNO=ERR_SIGNAL_NOT_SUPPORTED RAISE ;
+    ENDPROC
+
+    !Gets an IO
+    FUNC num getIO(dataPointer signal)
+        VAR signaldi ALIAS_di;
+        VAR signaldo ALIAS_do;
+        VAR signalai ALIAS_ai;
+        VAR signalao ALIAS_ao;
+        VAR signalgi ALIAS_gi;
+        VAR signalgo ALIAS_go;
+        VAR string signalName;
+
+        BookErrNo ERR_NOT_A_SIGNAL;
+        BookErrNo ERR_SIGNAL_NOT_SUPPORTED;
+
+        TEST signal.type
+
+        CASE Type(ALIAS_di):
+            signalName:=signal.name;
+            AliasIO signalName,ALIAS_di;
+            RETURN DInput(ALIAS_di);
+
+        CASE Type(ALIAS_do):
+            signalName:=signal.name;
+            AliasIO signalName,ALIAS_do;
+            RETURN DOutput(ALIAS_do);
+
+        CASE Type(ALIAS_ai):
+            signalName:=signal.name;
+            AliasIO signalName,ALIAS_ai;
+            RETURN AInput(ALIAS_ai);
+
+        CASE Type(ALIAS_ao):
+            signalName:=signal.name;
+            AliasIO signalName,ALIAS_ao;
+            RETURN AOutput(ALIAS_ao);
+
+        CASE Type(ALIAS_gi):
+            signalName:=signal.name;
+            AliasIO signalName,ALIAS_gi;
+            RETURN GInput(ALIAS_gi);
+
+        CASE Type(ALIAS_go):
+            signalName:=signal.name;
+            AliasIO signalName,ALIAS_go;
+            RETURN GOutput(ALIAS_go);
+
+        DEFAULT:
+            RAISE ERR_NOT_A_SIGNAL;
+        ENDTEST
+
+    ERROR
+        IF ERRNO=ERR_NOT_A_SIGNAL RAISE ;
+        IF ERRNO=ERR_SIGNAL_NOT_SUPPORTED RAISE ;
+    ENDFUNC
+
+    !Pulses an IO
+    PROC pulseIO(dataPointer signal\switch High\num Lenght)
+
+        VAR signaldo ALIAS_do;
+        VAR string signalName;
+
+        BookErrNo ERR_NOT_A_SIGNAL;
+        BookErrNo ERR_SIGNAL_NOT_SUPPORTED;
+
+        IF NOT dataPointer_isIO(signal) RAISE ERR_NOT_A_SIGNAL;
+        IF signal.type<>Type(ALIAS_do) RAISE ERR_SIGNAL_NOT_SUPPORTED;
+
+        signalName:=signal.name;
+        AliasIO signalName,ALIAS_do;
+
+        PulseDO\High?High\PLength?Lenght,ALIAS_do;
+
+    ERROR
+        IF ERRNO=ERR_NOT_A_SIGNAL RAISE ;
+        IF ERRNO=ERR_SIGNAL_NOT_SUPPORTED RAISE ;
+    ENDPROC
+
+ENDMODULE

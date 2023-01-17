@@ -1,0 +1,184 @@
+MODULE RNL_E_mainManager(SYSMODULE)
+
+    !The main manager distributes program execution to the different parts of the program
+
+    !===========================================================================
+    ! === Data ===
+    !===========================================================================
+
+    LOCAL VAR dnum mainCycle:=1;
+    LOCAL VAR num mainDeltaTime:=0;
+
+    LOCAL VAR bool isInConfig:=FALSE;
+    LOCAL VAR bool isInInit:=FALSE;
+    LOCAL VAR bool isInMain:=FALSE;
+
+    LOCAL VAR clock deltaClock;
+
+    !===========================================================================
+    ! === Event Declarations ===
+    !===========================================================================
+
+    PERS event main_start:=[1000];
+    PERS event main_started:=[1001];
+    PERS event main_stop:=[1010];
+    PERS event main_stopped:=[1011];
+
+    PERS event safety_safeState:=[1020];
+    PERS event safety_unsafeState:=[1021];
+
+    PERS event main_regular_event:=[100];
+
+    PERS event sysEvent_power_on:=[101];
+    PERS event sysEvent_qstop:=[102];
+    PERS event sysEvent_reset:=[103];
+    PERS event sysEvent_restart:=[104];
+    PERS event sysEvent_start:=[105];
+    PERS event sysEvent_step:=[106];
+    PERS event sysEvent_stop:=[107];
+
+
+    !===========================================================================
+    ! === main loop ===
+    !===========================================================================
+
+    PROC RNL_main()
+
+        VAR num TPReadFK_Response;
+        VAR errnum breakFlag;
+
+        !Run setup phase only first cycle
+        IF main_isFirstCycle() THEN
+
+            ClkStop deltaClock;
+            ClkReset deltaClock;
+            ClkStart deltaClock;
+
+            !Load and/or refresh any modules in the addon folder
+            moduleManager_init;
+
+            !Execute local and global config()
+            isInConfig:=TRUE;
+            try\onAllDataTypes,"config";
+            try "config";
+            isInConfig:=FALSE;
+
+            !increment ppToMain Counter
+            SetGO RNL_ppToMain_counter,RNL_ppToMain_counter+1;
+            IF RNL_ppToMain_counter>=8388607 SetGO RNL_ppToMain_counter,1;
+
+            !Execute global and local init()
+            isInInit:=TRUE;
+            try "init";
+            try\onAllDataTypes,"init";
+            isInInit:=FALSE;
+
+            !Time the setupt phase
+            mainDeltaTime:=ClkRead(deltaClock);
+            ClkReset deltaClock;
+            ClkStart deltaClock;
+
+        ENDIF
+
+        !Execute user defined main()
+        isInMain:=TRUE;
+        try "main";
+        isInMain:=FALSE;
+
+        !Execute all update methods in the different modules
+        try\onAllDataTypes,"update";
+
+        !Execute queued ioEvents
+        ioEvent_executeQueuedEvents;
+
+        !Execute queued RMQ messages
+        RMQ_executeQueuedMessages;
+
+        !Execute main regular event
+        !TRIGGER main_regular_event;
+
+        !Cycle time, to yield processor for other tasks
+        !WaitTime 0.1;
+        !RMQ waits for 0.1 each cycle to wait for message, making this redundant
+
+        !Time the main loop
+        mainDeltaTime:=ClkRead(deltaClock);
+        ClkStop deltaClock;
+        ClkReset deltaClock;
+        ClkStart deltaClock;
+
+        !increment main cycle
+        Incr mainCycle;
+        IF mainCycle>=4503599627370495 mainCycle:=2;
+
+    ENDPROC
+
+
+    !===========================================================================
+    ! === Main Status Methods ===
+    !===========================================================================
+
+    !Returns true of it is the first cycle
+    FUNC bool main_isFirstCycle()
+        RETURN main_getCycle()<=1;
+    ENDFUNC
+
+    !Returns the current cycle
+    FUNC dnum main_getCycle()
+        RETURN mainCycle;
+    ENDFUNC
+
+    !Returns the deltatime of the last cycle
+    FUNC num main_getDeltaTime()
+        RETURN mainDeltaTime;
+    ENDFUNC
+
+    !Return TRUE if the program is in the config phase
+    FUNC bool main_isInConfig()
+        RETURN isInConfig;
+    ENDFUNC
+
+    !Return TRUE if the program is in the init phase
+    FUNC bool main_isInInit()
+        RETURN isInInit;
+    ENDFUNC
+
+    !Return TRUE if the program is in the main phase
+    FUNC bool main_isInMain()
+        RETURN isInMain;
+    ENDFUNC
+    
+
+    !===========================================================================
+    ! === System Event Routines ===
+    !===========================================================================
+
+    PROC eventRountine_power_on()
+        TRIGGER sysEvent_power_on;
+    ENDPROC
+
+    PROC eventRountine_qstop()
+        TRIGGER sysEvent_qstop;
+    ENDPROC
+
+    PROC eventRountine_reset()
+        TRIGGER sysEvent_reset;
+    ENDPROC
+
+    PROC eventRountine_restart()
+        TRIGGER sysEvent_restart;
+    ENDPROC
+
+    PROC eventRountine_start()
+        TRIGGER sysEvent_start;
+    ENDPROC
+
+    PROC eventRountine_step()
+        TRIGGER sysEvent_step;
+    ENDPROC
+
+    PROC eventRountine_stop()
+        TRIGGER sysEvent_stop;
+    ENDPROC
+
+ENDMODULE

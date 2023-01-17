@@ -1,0 +1,18 @@
+MODULE RNL_B_roll(SYSMODULE)
+    
+    !Intuitive random implementation emulating dice rolling
+    
+    CONST num d4 := 4;
+    CONST num d6 := 6;
+    CONST num d8 := 8;
+    CONST num d10 := 10;
+    CONST num d12 := 12;
+    CONST num d20 := 20;
+    CONST num d100 := 100;
+    
+    FUNC num roll(num numberOfDice, num sizeOfDice)
+        <SMT>
+    ENDFUNC
+    
+    
+ENDMODULE

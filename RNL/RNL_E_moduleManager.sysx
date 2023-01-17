@@ -1,0 +1,63 @@
+MODULE RNL_E_moduleManager(SYSMODULE)
+
+    !The path from which the modules are loaded
+    CONST string path:="HOME:/RNL_modules";
+
+    !Initialize the module manager
+    PROC moduleManager_init()
+        moduleManager_refresh;
+    ENDPROC
+        
+    !refresh the static modules
+    LOCAL PROC moduleManager_refresh()
+        VAR dir directory;
+        VAR string filename;
+
+        TPErase;
+        TPWrite "=======================================";
+        TPWrite "=== moduleManager refreshing...        ";
+
+        !Open path
+        OpenDir directory,path;
+
+        !Loop over files
+        WHILE ReadDir(directory,filename) DO
+
+            IF filename<>"." AND filename<>".." THEN
+                Load path\File:=filename\CheckRef;
+                TPWrite Filename;
+            ENDIF
+
+        ENDWHILE
+
+        !Clean up
+        CloseDir directory;
+
+        TPWrite "=== moduleManager Done!                ";
+        TPWrite "=======================================";
+        IF OpMode() = OP_MAN_PROG WaitTime 2;
+        IF OpMode() = OP_MAN_PROG WaitTime 2;
+        TPErase;
+
+    ERROR
+        !Create directory if it does not exist
+        IF ERRNO=ERR_FILEACC THEN
+            MakeDir path;
+            RETRY;
+        ENDIF
+
+        !If a module is allready loaded, unload it and load again
+        IF ERRNO=ERR_LOADED THEN
+            UnLoad path\File:=filename;
+            RETRY;
+        ENDIF
+
+        !If references are 
+        IF ERRNO=ERR_LINKREF THEN
+            SkipWarn;
+            ErrWrite "RNL_E_moduleManager failed to load module.",filename;
+            TRYNEXT;
+        ENDIF
+    ENDPROC
+
+ENDMODULE

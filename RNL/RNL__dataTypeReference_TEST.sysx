@@ -1,0 +1,127 @@
+MODULE RNL__dataTypeReference_TEST(SYSMODULE)
+
+    LOCAL CONST dataType dataTypeUnderTest:="dataTypeReference";
+
+
+    PROC dataTypeReference_TEST()
+        TPWrite "Starting RNL__dataTypeReference_TEST";
+        !test_CREATE_ERASE;
+        test_LIST_APPEND_POP;
+    ENDPROC
+
+    !===========================================================================
+    ! test_CREATE_ERASE
+    ! Test NEW construction and ERASE destructions of dataTypeReference
+    !===========================================================================
+
+    LOCAL PROC test_CREATE_ERASE()
+        VAR dataPointer pointers{200};
+        VAR clock clk;
+
+        ClkStart clk;
+        FOR j FROM 1 TO 20 DO
+
+            !TPWrite "j: "+NumToStr(j,0);
+
+            IF NOT dataTypeReference_lenght()=0 ErrWrite "RNL__dataTypeReference_TEST -> test_CREATE_ERASE FAILED","dataTypeReference_lenght() = 0"
+            \RL2:="dataTypeReference_lenght() = "+NumToStr(dataTypeReference_lenght(),2)
+            \RL3:=" j: "+NumToStr(j,0);
+
+            FOR i FROM 1 TO Dim(pointers,1) DO
+                !TPWrite "j: "+NumToStr(j,0) + " i: "+ NumToStr(i,0);
+                pointers{i}:=NEW(dataTypeUnderTest);
+                !TPWrite "NEW - i: " + NumToStr(i,0) +" Lenght: " + NumToStr(dataTypeReference_lenght(),0);
+            ENDFOR
+
+            IF NOT dataTypeReference_lenght()=200 ErrWrite "RNL__dataTypeReference_TEST -> test_CREATE_ERASE FAILED","dataTypeReference_lenght() = 200"
+            \RL2:="dataTypeReference_lenght() = "+NumToStr(dataTypeReference_lenght(),2)
+            \RL3:=" j: "+NumToStr(j,0);
+
+            FOR i FROM 1 TO Dim(pointers,1) DO
+                !TPWrite "j: "+NumToStr(j,0) + " i: "+ NumToStr(i,0);
+                ERASE pointers{i};
+                !TPWrite "NEW - i: " + NumToStr(i,0) +" Lenght: " + NumToStr(dataTypeReference_lenght(),0);
+            ENDFOR
+
+        ENDFOR
+        TPWrite "Completed test_CREATE_ERASE (8000 op)in: "+NumToStr(ClkRead(clk),2);
+
+
+    ENDPROC
+
+    !===========================================================================
+    ! test_LIST
+    ! Test the dataTypeReference list methods
+    !===========================================================================
+
+    PROC test_LIST_APPEND_POP()
+        VAR dataTypeReference list{200};
+        VAR num list_lenght;
+
+        VAR dataTypeReference data0:=[["","",0,"","",0,""],1,1,1];
+        VAR dataTypeReference data1:=[["","",0,"","",0,""],1,0,0];
+        VAR dataTypeReference data2:=[["","",0,"","",0,""],0,1,0];
+        VAR dataTypeReference data3:=[["","",0,"","",0,""],0,0,1];
+
+        VAR clock clk;
+
+        ClkStart clk;
+
+        !With lenght
+        LIST_dataTypeReference_clear list\lenght:=list_lenght;
+
+        FOR i FROM 1 TO 50 DO
+            LIST_dataTypeReference_append list\lenght:=list_lenght,data0;
+            LIST_dataTypeReference_append list\lenght:=list_lenght,data1;
+            LIST_dataTypeReference_append list\lenght:=list_lenght,data2;
+            LIST_dataTypeReference_append list\lenght:=list_lenght,data3;
+            IF list_lenght<>i*4 ErrWrite "RNL__dataTypeReference_TEST -> test_LIST_APPEND_POP FAILED","list_lenght <> "+NumToStr(i*4,1)
+            \RL2:="list_lenght <> "+NumToStr(list_lenght,1);
+        ENDFOR
+
+        FOR i FROM 1 TO 50 DO
+            IF LIST_dataTypeReference_pop(list\lenght:=list_lenght)<>data3
+            OR LIST_dataTypeReference_pop(list\lenght:=list_lenght)<>data2
+            OR LIST_dataTypeReference_pop(list\lenght:=list_lenght)<>data1
+            OR LIST_dataTypeReference_pop(list\lenght:=list_lenght)<>data0 THEN
+                ErrWrite "RNL__dataTypeReference_TEST -> test_LIST FAILED","Append/Pop With lenght";
+            ENDIF
+            IF list_lenght<>200-(i*4) ErrWrite "RNL__dataTypeReference_TEST -> test_LIST_APPEND_POP FAILED","list_lenght <> "+NumToStr(200-(i*4),1)
+            \RL2:="list_lenght <> "+NumToStr(list_lenght,1);
+        ENDFOR
+
+        !Without lenght
+        LIST_dataTypeReference_clear list;
+
+        IF NOT LIST_dataTypeReference_lenght(list)=0 ErrWrite "1 RNL__dataTypeReference_TEST -> test_LIST_APPEND_POP FAILED","dataTypeReference_lenght() = 0"
+        \RL2:="dataTypeReference_lenght() = "+NumToStr(LIST_dataTypeReference_lenght(list),0);
+
+        !TPWrite "lenght: "+NumToStr(LIST_dataTypeReference_lenght(list),0);
+
+        FOR i FROM 1 TO 50 DO
+            LIST_dataTypeReference_append list,data0;
+            LIST_dataTypeReference_append list,data1;
+            LIST_dataTypeReference_append list,data2;
+            LIST_dataTypeReference_append list,data3;
+            !TPWrite "lenght: "+NumToStr(LIST_dataTypeReference_lenght(list),0);
+        ENDFOR
+
+        IF NOT LIST_dataTypeReference_lenght(list)=200 ErrWrite "2 RNL__dataTypeReference_TEST -> test_LIST_APPEND_POP FAILED","dataTypeReference_lenght() = 0"
+        \RL2:="dataTypeReference_lenght() = "+NumToStr(LIST_dataTypeReference_lenght(list),0);
+
+        FOR i FROM 1 TO 50 DO
+            IF LIST_dataTypeReference_pop(list)<>data3
+            OR LIST_dataTypeReference_pop(list)<>data2
+            OR LIST_dataTypeReference_pop(list)<>data1
+            OR LIST_dataTypeReference_pop(list)<>data0 THEN
+                ErrWrite "RNL__dataTypeReference_TEST -> test_LIST FAILED","Append/Pop without lenght";
+            ENDIF
+        ENDFOR
+
+        IF NOT LIST_dataTypeReference_lenght(list)=0 ErrWrite "3 RNL__dataTypeReference_TEST -> test_LIST_APPEND_POP FAILED","dataTypeReference_lenght() = 0"
+        \RL2:="dataTypeReference_lenght() = "+NumToStr(LIST_dataTypeReference_lenght(list),0);
+
+        TPWrite "Completed test_LIST in: "+NumToStr(ClkRead(clk),2);
+    ENDPROC
+
+ENDMODULE

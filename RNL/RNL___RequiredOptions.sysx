@@ -1,0 +1,7 @@
+MODULE RNL___RequiredOptions(SYSMODULE)
+    
+    !RMQ requires PC-interface or Multitasking
+    
+    !RNL__shape and RNL__worldZoneEvent requires WorldZones
+    
+ENDMODULE

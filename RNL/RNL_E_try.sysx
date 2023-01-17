@@ -1,0 +1,388 @@
+MODULE RNL_E_try(SYSMODULE)
+
+    VAR errnum ERR_LATE_BINDING:=-1;
+
+
+    PROC try(
+
+        \switch onAllDataTypes
+
+        \rmqQueue in_RMQ
+
+        |INOUT dataPointer obj,
+
+        string procedureName,
+
+        \dataPointer arg1
+        |INOUT dataPointer arg1_INOUT
+        \dataPointer arg2
+        |INOUT dataPointer arg2_INOUT
+        \dataPointer arg3
+        \dataPointer arg4
+        \dataPointer arg5
+        \dataPointer arg6
+        \dataPointer arg7
+        \dataPointer arg8
+        \dataPointer arg9
+        \dataPointer arg10
+        \dataPointer arg11
+        \dataPointer arg12
+
+        \INOUT bool successFlag
+        \num MaxTime
+        \INOUT bool TimeFlag
+        \INOUT num executionTime
+        \Switch trowError
+        )
+
+        VAR dataPointer object_;
+        VAR dataPointer object_inheritanceParent_;
+        VAR dataPointer object_inheritanceParent_Pointer;
+
+        VAR string objectModuleName;
+        VAR bool procedureExecuted;
+
+        VAR clock executionTimeClock;
+
+        VAR dataPointer rmqCommand;
+        VAR command rmqCommand_;
+        VAR rmqCode_id rmqID;
+
+        !Data Search variables
+        VAR datapos block;
+        VAR string name;
+        VAR dataType dataTypeName;
+        VAR string moduleName;
+        VAR bool symbolValid;
+
+        !Is set true when latebinding is executed, indicates that the error came
+        !from the procedure called, or is late bidning related
+        VAR bool errorFromLateBinding:=FALSE;
+
+        !Warn if RNL is not initialized
+        !IF NOT main_isInitialized() ErrWrite "RNL has not initialized propperly","Check that RNL_main is set as main entry point in controller config";
+
+        IF Present(onAllDataTypes) THEN
+            !Search through all datatypes
+            SetDataSearch "dataType"\TypeMod:="RNL__dataPointer"\PersSym;
+            WHILE GetNextSym(name,block\Recursive) DO
+
+                !IF name starts with dataType_
+                IF StrPart(name,1,9)="dataType_" THEN
+                    
+                    GetDataVal name\Block:=block,dataTypeName;
+
+                    moduleName:="RNL__"+dataTypeName;
+
+                    try moduleName+":"+procedureName
+                        \arg1?arg1
+                        \arg1_INOUT?arg1_INOUT
+                        \arg2?arg2
+                        \arg2_INOUT?arg2_INOUT
+                        \arg3?arg3
+                        \arg4?arg4
+                        \arg5?arg5
+                        \arg6?arg6
+                        \arg7?arg7
+                        \arg8?arg8
+                        \arg9?arg9
+                        \arg10?arg10
+                        \arg11?arg11
+                        \arg12?arg12;
+                ENDIF
+
+            ENDWHILE
+
+            RETURN ;
+        ENDIF
+
+        !Setup object_ data 
+        object_:=dataPointer_NULL;
+        IF Present(obj) object_:=obj;
+        IF Present(in_RMQ) object_.rmqLocation:=in_RMQ;
+
+        !Handle successFlag
+        IF Present(successFlag) successFlag:=FALSE;
+
+        !Start executionTimeClock 
+        ClkStart executionTimeClock;
+
+        !Find object module name for this inheritor. This is nessesary to call local
+        !procedures from that module
+        !If object is not specified, object module name is left blank
+        objectModuleName:="";
+        IF object_.type<>dataPointer_NULL.type objectModuleName:="RNL__"+object_.type+":";
+
+        procedureExecuted:=TRUE;
+
+        !If an RMQ remote location is specified, execute the call to that remote;
+        IF object_.rmqLocation<>rmqQueue_NULL AND object_.rmqLocation<>rmqQueue_SELF() THEN
+            rmqCommand_:=command_NULL;
+
+            IF Present(obj) rmqCommand_.object:=obj;
+            rmqCommand_.method:=procedureName;
+            IF Present(arg1) rmqCommand_.argument1:=arg1;
+            IF Present(arg1_INOUT) rmqCommand_.argument1:=arg1_INOUT;
+            IF Present(arg2) rmqCommand_.argument2:=arg2;
+            IF Present(arg2_INOUT) rmqCommand_.argument2:=arg2_INOUT;
+            IF Present(arg3) rmqCommand_.argument3:=arg3;
+            IF Present(arg4) rmqCommand_.argument4:=arg4;
+            IF Present(arg5) rmqCommand_.argument5:=arg5;
+
+            rmqCommand:=NEW_("command");
+
+            command_set rmqCommand,rmqCommand_;
+
+            rmqID:=RMQ_start(object_.rmqLocation,rmqCommand);
+
+            ERASE_ rmqCommand;
+
+            rmqCommand:=RMQ_wait(rmqID\maxTime?maxTime\TimeFlag?TimeFlag);
+            procedureExecuted:=TRUE;
+            IF Present(TimeFlag) procedureExecuted:=TimeFlag;
+
+            rmqCommand_:=command_get(rmqCommand);
+
+            ERASE_ rmqCommand;
+
+            IF Present(obj) rmqCommand_.object:=obj;
+            rmqCommand_.method:=procedureName;
+            IF Present(arg1) arg1:=rmqCommand_.argument1;
+            IF Present(arg1_INOUT) arg1_INOUT:=rmqCommand_.argument1;
+            IF Present(arg2) arg2:=rmqCommand_.argument2;
+            IF Present(arg2_INOUT) arg2_INOUT:=rmqCommand_.argument2;
+            IF Present(arg3) arg3:=rmqCommand_.argument3;
+            IF Present(arg4) arg4:=rmqCommand_.argument4;
+            IF Present(arg5) arg5:=rmqCommand_.argument5;
+
+        ELSE
+
+            !Try to call the method
+            errorFromLateBinding:=TRUE;
+            IF object_.type<>dataPointer_NULL.type THEN
+                !With object
+                IF Present(arg12) THEN
+                    IF Present(arg1) AND Present(arg2)%objectModuleName+procedureName %object_,arg1,arg2,arg3,arg4,arg5,arg6,arg7,arg8,arg9,arg10,arg11,arg12;
+                    IF Present(arg1_INOUT) AND Present(arg2)%objectModuleName+procedureName %object_,arg1_INOUT,arg2,arg3,arg4,arg5,arg6,arg7,arg8,arg9,arg10,arg11,arg12;
+                    IF Present(arg1) AND Present(arg2_INOUT)%objectModuleName+procedureName %object_,arg1_INOUT,arg2,arg3,arg4,arg5,arg6,arg7,arg8,arg9,arg10,arg11,arg12;
+                    IF Present(arg1_INOUT) AND Present(arg2_INOUT)%objectModuleName+procedureName %object_,arg1_INOUT,arg2,arg3,arg4,arg5,arg6,arg7,arg8,arg9,arg10,arg11,arg12;
+                ELSEIF Present(arg11) THEN
+                    IF Present(arg1) AND Present(arg2)%objectModuleName+procedureName %object_,arg1,arg2,arg3,arg4,arg5,arg6,arg7,arg8,arg9,arg10,arg11;
+                    IF Present(arg1_INOUT) AND Present(arg2)%objectModuleName+procedureName %object_,arg1_INOUT,arg2,arg3,arg4,arg5,arg6,arg7,arg8,arg9,arg10,arg11;
+                    IF Present(arg1) AND Present(arg2_INOUT)%objectModuleName+procedureName %object_,arg1,arg2_INOUT,arg3,arg4,arg5,arg6,arg7,arg8,arg9,arg10,arg11;
+                    IF Present(arg1_INOUT) AND Present(arg2_INOUT)%objectModuleName+procedureName %object_,arg1_INOUT,arg2_INOUT,arg3,arg4,arg5,arg6,arg7,arg8,arg9,arg10,arg11;
+                ELSEIF Present(arg10) THEN
+                    IF Present(arg1) AND Present(arg2)%objectModuleName+procedureName %object_,arg1,arg2,arg3,arg4,arg5,arg6,arg7,arg8,arg9,arg10;
+                    IF Present(arg1_INOUT) AND Present(arg2)%objectModuleName+procedureName %object_,arg1_INOUT,arg2,arg3,arg4,arg5,arg6,arg7,arg8,arg9,arg10;
+                    IF Present(arg1) AND Present(arg2_INOUT)%objectModuleName+procedureName %object_,arg1,arg2_INOUT,arg3,arg4,arg5,arg6,arg7,arg8,arg9,arg10;
+                    IF Present(arg1_INOUT) AND Present(arg2_INOUT)%objectModuleName+procedureName %object_,arg1_INOUT,arg2_INOUT,arg3,arg4,arg5,arg6,arg7,arg8,arg9,arg10;
+                ELSEIF Present(arg9) THEN
+                    IF Present(arg1) AND Present(arg2)%objectModuleName+procedureName %object_,arg1,arg2,arg3,arg4,arg5,arg6,arg7,arg8,arg9;
+                    IF Present(arg1_INOUT) AND Present(arg2)%objectModuleName+procedureName %object_,arg1_INOUT,arg2,arg3,arg4,arg5,arg6,arg7,arg8,arg9;
+                    IF Present(arg1) AND Present(arg2_INOUT)%objectModuleName+procedureName %object_,arg1,arg2_INOUT,arg3,arg4,arg5,arg6,arg7,arg8,arg9;
+                    IF Present(arg1_INOUT) AND Present(arg2_INOUT)%objectModuleName+procedureName %object_,arg1_INOUT,arg2_INOUT,arg3,arg4,arg5,arg6,arg7,arg8,arg9;
+                ELSEIF Present(arg8) THEN
+                    IF Present(arg1) AND Present(arg2)%objectModuleName+procedureName %object_,arg1,arg2,arg3,arg4,arg5,arg6,arg7,arg8;
+                    IF Present(arg1_INOUT) AND Present(arg2)%objectModuleName+procedureName %object_,arg1_INOUT,arg2,arg3,arg4,arg5,arg6,arg7,arg8;
+                    IF Present(arg1) AND Present(arg2_INOUT)%objectModuleName+procedureName %object_,arg1,arg2_INOUT,arg3,arg4,arg5,arg6,arg7,arg8;
+                    IF Present(arg1_INOUT) AND Present(arg2_INOUT)%objectModuleName+procedureName %object_,arg1_INOUT,arg2_INOUT,arg3,arg4,arg5,arg6,arg7,arg8;
+                ELSEIF Present(arg7) THEN
+                    IF Present(arg1) AND Present(arg2)%objectModuleName+procedureName %object_,arg1,arg2,arg3,arg4,arg5,arg6,arg7;
+                    IF Present(arg1_INOUT) AND Present(arg2)%objectModuleName+procedureName %object_,arg1_INOUT,arg2,arg3,arg4,arg5,arg6,arg7;
+                    IF Present(arg1) AND Present(arg2_INOUT)%objectModuleName+procedureName %object_,arg1,arg2_INOUT,arg3,arg4,arg5,arg6,arg7;
+                    IF Present(arg1_INOUT) AND Present(arg2_INOUT)%objectModuleName+procedureName %object_,arg1_INOUT,arg2_INOUT,arg3,arg4,arg5,arg6,arg7;
+                ELSEIF Present(arg6) THEN
+                    IF Present(arg1) AND Present(arg2)%objectModuleName+procedureName %object_,arg1,arg2,arg3,arg4,arg5,arg6;
+                    IF Present(arg1_INOUT) AND Present(arg2)%objectModuleName+procedureName %object_,arg1_INOUT,arg2,arg3,arg4,arg5,arg6;
+                    IF Present(arg1) AND Present(arg2_INOUT)%objectModuleName+procedureName %object_,arg1,arg2_INOUT,arg3,arg4,arg5,arg6;
+                    IF Present(arg1_INOUT) AND Present(arg2_INOUT)%objectModuleName+procedureName %object_,arg1_INOUT,arg2_INOUT,arg3,arg4,arg5,arg6;
+                ELSEIF Present(arg5) THEN
+                    IF Present(arg1) AND Present(arg2)%objectModuleName+procedureName %object_,arg1,arg2,arg3,arg4,arg5;
+                    IF Present(arg1_INOUT) AND Present(arg2)%objectModuleName+procedureName %object_,arg1_INOUT,arg2,arg3,arg4,arg5;
+                    IF Present(arg1) AND Present(arg2_INOUT)%objectModuleName+procedureName %object_,arg1,arg2_INOUT,arg3,arg4,arg5;
+                    IF Present(arg1_INOUT) AND Present(arg2_INOUT)%objectModuleName+procedureName %object_,arg1_INOUT,arg2_INOUT,arg3,arg4,arg5;
+                ELSEIF Present(arg4) THEN
+                    IF Present(arg1) AND Present(arg2)%objectModuleName+procedureName %object_,arg1,arg2,arg3,arg4;
+                    IF Present(arg1_INOUT) AND Present(arg2)%objectModuleName+procedureName %object_,arg1_INOUT,arg2,arg3,arg4;
+                    IF Present(arg1) AND Present(arg2_INOUT)%objectModuleName+procedureName %object_,arg1,arg2_INOUT,arg3,arg4;
+                    IF Present(arg1_INOUT) AND Present(arg2_INOUT)%objectModuleName+procedureName %object_,arg1_INOUT,arg2_INOUT,arg3,arg4;
+                ELSEIF Present(arg3) THEN
+                    IF Present(arg1) AND Present(arg2)%objectModuleName+procedureName %object_,arg1,arg2,arg3;
+                    IF Present(arg1_INOUT) AND Present(arg2)%objectModuleName+procedureName %object_,arg1_INOUT,arg2,arg3;
+                    IF Present(arg1) AND Present(arg2_INOUT)%objectModuleName+procedureName %object_,arg1,arg2_INOUT,arg3;
+                    IF Present(arg1_INOUT) AND Present(arg2_INOUT)%objectModuleName+procedureName %object_,arg1_INOUT,arg2_INOUT,arg3;
+                ELSEIF Present(arg2) OR Present(arg2_INOUT) THEN
+                    IF Present(arg1) AND Present(arg2)%objectModuleName+procedureName %object_,arg1,arg2;
+                    IF Present(arg1_INOUT) AND Present(arg2)%objectModuleName+procedureName %object_,arg1_INOUT,arg2;
+                    IF Present(arg1) AND Present(arg2_INOUT)%objectModuleName+procedureName %object_,arg1,arg2_INOUT;
+                    IF Present(arg1_INOUT) AND Present(arg2_INOUT)%objectModuleName+procedureName %object_,arg1_INOUT,arg2_INOUT;
+                ELSEIF Present(arg1) OR Present(arg1_INOUT) THEN
+                    IF Present(arg1)%objectModuleName+procedureName %object_,arg1;
+                    IF Present(arg1_INOUT)%objectModuleName+procedureName %object_,arg1_INOUT;
+                ELSE
+                    %objectModuleName+procedureName %object_;
+                ENDIF
+            ELSE
+                !Without object
+                IF Present(arg12) THEN
+                    IF Present(arg1) AND Present(arg2)%objectModuleName+procedureName %arg1,arg2,arg3,arg4,arg5,arg6,arg7,arg8,arg9,arg10,arg11,arg12;
+                    IF Present(arg1_INOUT) AND Present(arg2)%objectModuleName+procedureName %arg1_INOUT,arg2,arg3,arg4,arg5,arg6,arg7,arg8,arg9,arg10,arg11,arg12;
+                    IF Present(arg1) AND Present(arg2_INOUT)%objectModuleName+procedureName %arg1,arg2_INOUT,arg3,arg4,arg5,arg6,arg7,arg8,arg9,arg10,arg11,arg12;
+                    IF Present(arg1_INOUT) AND Present(arg2_INOUT)%objectModuleName+procedureName %arg1_INOUT,arg2_INOUT,arg3,arg4,arg5,arg6,arg7,arg8,arg9,arg10,arg11,arg12;
+                ELSEIF Present(arg11) THEN
+                    IF Present(arg1) AND Present(arg2)%objectModuleName+procedureName %arg1,arg2,arg3,arg4,arg5,arg6,arg7,arg8,arg9,arg10,arg11;
+                    IF Present(arg1_INOUT) AND Present(arg2)%objectModuleName+procedureName %arg1_INOUT,arg2,arg3,arg4,arg5,arg6,arg7,arg8,arg9,arg10,arg11;
+                    IF Present(arg1) AND Present(arg2_INOUT)%objectModuleName+procedureName %arg1,arg2_INOUT,arg3,arg4,arg5,arg6,arg7,arg8,arg9,arg10,arg11;
+                    IF Present(arg1_INOUT) AND Present(arg2_INOUT)%objectModuleName+procedureName %arg1_INOUT,arg2_INOUT,arg3,arg4,arg5,arg6,arg7,arg8,arg9,arg10,arg11;
+                ELSEIF Present(arg10) THEN
+                    IF Present(arg1) AND Present(arg2)%objectModuleName+procedureName %arg1,arg2,arg3,arg4,arg5,arg6,arg7,arg8,arg9,arg10;
+                    IF Present(arg1_INOUT) AND Present(arg2)%objectModuleName+procedureName %arg1_INOUT,arg2,arg3,arg4,arg5,arg6,arg7,arg8,arg9,arg10;
+                    IF Present(arg1) AND Present(arg2_INOUT)%objectModuleName+procedureName %arg1,arg2_INOUT,arg3,arg4,arg5,arg6,arg7,arg8,arg9,arg10;
+                    IF Present(arg1_INOUT) AND Present(arg2_INOUT)%objectModuleName+procedureName %arg1_INOUT,arg2_INOUT,arg3,arg4,arg5,arg6,arg7,arg8,arg9,arg10;
+                ELSEIF Present(arg9) THEN
+                    IF Present(arg1) AND Present(arg2)%objectModuleName+procedureName %arg1,arg2,arg3,arg4,arg5,arg6,arg7,arg8,arg9;
+                    IF Present(arg1_INOUT) AND Present(arg2)%objectModuleName+procedureName %arg1_INOUT,arg2,arg3,arg4,arg5,arg6,arg7,arg8,arg9;
+                    IF Present(arg1) AND Present(arg2_INOUT)%objectModuleName+procedureName %arg1,arg2_INOUT,arg3,arg4,arg5,arg6,arg7,arg8,arg9;
+                    IF Present(arg1_INOUT) AND Present(arg2_INOUT)%objectModuleName+procedureName %arg1_INOUT,arg2_INOUT,arg3,arg4,arg5,arg6,arg7,arg8,arg9;
+                ELSEIF Present(arg8) THEN
+                    IF Present(arg1) AND Present(arg2)%objectModuleName+procedureName %arg1,arg2,arg3,arg4,arg5,arg6,arg7,arg8;
+                    IF Present(arg1_INOUT) AND Present(arg2)%objectModuleName+procedureName %arg1_INOUT,arg2,arg3,arg4,arg5,arg6,arg7,arg8;
+                    IF Present(arg1) AND Present(arg2_INOUT)%objectModuleName+procedureName %arg1,arg2_INOUT,arg3,arg4,arg5,arg6,arg7,arg8;
+                    IF Present(arg1_INOUT) AND Present(arg2_INOUT)%objectModuleName+procedureName %arg1_INOUT,arg2_INOUT,arg3,arg4,arg5,arg6,arg7,arg8;
+                ELSEIF Present(arg7) THEN
+                    IF Present(arg1) AND Present(arg2)%objectModuleName+procedureName %arg1,arg2,arg3,arg4,arg5,arg6,arg7;
+                    IF Present(arg1_INOUT) AND Present(arg2)%objectModuleName+procedureName %arg1_INOUT,arg2,arg3,arg4,arg5,arg6,arg7;
+                    IF Present(arg1) AND Present(arg2_INOUT)%objectModuleName+procedureName %arg1,arg2_INOUT,arg3,arg4,arg5,arg6,arg7;
+                    IF Present(arg1_INOUT) AND Present(arg2_INOUT)%objectModuleName+procedureName %arg1_INOUT,arg2_INOUT,arg3,arg4,arg5,arg6,arg7;
+                ELSEIF Present(arg6) THEN
+                    IF Present(arg1) AND Present(arg2)%objectModuleName+procedureName %arg1,arg2,arg3,arg4,arg5,arg6;
+                    IF Present(arg1_INOUT) AND Present(arg2)%objectModuleName+procedureName %arg1_INOUT,arg2,arg3,arg4,arg5,arg6;
+                    IF Present(arg1) AND Present(arg2_INOUT)%objectModuleName+procedureName %arg1,arg2_INOUT,arg3,arg4,arg5,arg6;
+                    IF Present(arg1_INOUT) AND Present(arg2_INOUT)%objectModuleName+procedureName %arg1_INOUT,arg2_INOUT,arg3,arg4,arg5,arg6;
+                ELSEIF Present(arg5) THEN
+                    IF Present(arg1) AND Present(arg2)%objectModuleName+procedureName %arg1,arg2,arg3,arg4,arg5;
+                    IF Present(arg1_INOUT) AND Present(arg2)%objectModuleName+procedureName %arg1_INOUT,arg2,arg3,arg4,arg5;
+                    IF Present(arg1) AND Present(arg2_INOUT)%objectModuleName+procedureName %arg1,arg2_INOUT,arg3,arg4,arg5;
+                    IF Present(arg1_INOUT) AND Present(arg2_INOUT)%objectModuleName+procedureName %arg1_INOUT,arg2_INOUT,arg3,arg4,arg5;
+                ELSEIF Present(arg4) THEN
+                    IF Present(arg1) AND Present(arg2)%objectModuleName+procedureName %arg1,arg2,arg3,arg4;
+                    IF Present(arg1_INOUT) AND Present(arg2)%objectModuleName+procedureName %arg1_INOUT,arg2,arg3,arg4;
+                    IF Present(arg1) AND Present(arg2_INOUT)%objectModuleName+procedureName %arg1,arg2_INOUT,arg3,arg4;
+                    IF Present(arg1_INOUT) AND Present(arg2_INOUT)%objectModuleName+procedureName %arg1_INOUT,arg2_INOUT,arg3,arg4;
+                ELSEIF Present(arg3) THEN
+                    IF Present(arg1) AND Present(arg2)%objectModuleName+procedureName %arg1,arg2,arg3;
+                    IF Present(arg1_INOUT) AND Present(arg2)%objectModuleName+procedureName %arg1_INOUT,arg2,arg3;
+                    IF Present(arg1) AND Present(arg2_INOUT)%objectModuleName+procedureName %arg1,arg2_INOUT,arg3;
+                    IF Present(arg1_INOUT) AND Present(arg2_INOUT)%objectModuleName+procedureName %arg1_INOUT,arg2_INOUT,arg3;
+                ELSEIF Present(arg2) OR Present(arg2_INOUT) THEN
+                    IF Present(arg1) AND Present(arg2)%objectModuleName+procedureName %arg1,arg2;
+                    IF Present(arg1_INOUT) AND Present(arg2)%objectModuleName+procedureName %arg1_INOUT,arg2;
+                    IF Present(arg1) AND Present(arg2_INOUT)%objectModuleName+procedureName %arg1,arg2_INOUT;
+                    IF Present(arg1_INOUT) AND Present(arg2_INOUT)%objectModuleName+procedureName %arg1_INOUT,arg2_INOUT;
+                ELSEIF Present(arg1) OR Present(arg1_INOUT) THEN
+                    IF Present(arg1)%objectModuleName+procedureName %arg1;
+                    IF Present(arg1_INOUT)%objectModuleName+procedureName %arg1_INOUT;
+                ELSE
+                    %objectModuleName+procedureName %;
+                ENDIF
+            ENDIF
+            errorFromLateBinding:=FALSE;
+
+            !If procedure call failed, and there exists an inehritance parent:
+            !Recursively try to call the inheritance parent chain
+            IF procedureExecuted=FALSE
+            AND (object_.inheritanceParent_name<>"" OR object_.inheritanceParent_id>0) THEN
+
+                !Set up pointer for pointer for object (object_inheritanceParent_Pointer)
+                object_inheritanceParent_Pointer.type:=type(object_inheritanceParent_);
+                object_inheritanceParent_Pointer.name:=object_.inheritanceParent_name;
+                object_inheritanceParent_Pointer.id:=object_.inheritanceParent_id;
+
+                !Get pointer for object (object_inheritanceParent_)
+                object_inheritanceParent_:=dataPointer_get(object_inheritanceParent_Pointer);
+
+                !Recursive call using inheritanceParent as object pointer
+                try
+            \obj:=object_inheritanceParent_,
+            procedureName
+            \arg1?arg1
+            \arg1_INOUT?arg1_INOUT
+            \arg2?arg2
+            \arg2_INOUT?arg2_INOUT
+            \arg3?arg3
+            \arg4?arg4
+            \arg5?arg5
+            \arg6?arg6
+            \arg7?arg7
+            \arg8?arg8
+            \arg9?arg9
+            \arg10?arg10
+            \arg11?arg11
+            \arg12?arg12
+            \successFlag:=procedureExecuted
+            \MaxTime?MaxTime
+            \TimeFlag?TimeFlag
+            \executionTime?executionTime;
+            ENDIF
+
+        ENDIF
+
+        !Stop executionTimeClock 
+        ClkStop executionTimeClock;
+        IF Present(executionTime) executionTime:=ClkRead(executionTimeClock);
+
+        !If no recursive inheritance call was successfull, handle failure
+        IF procedureExecuted=FALSE THEN
+            !ERROR
+            !Was not able to call any inheritor with that object/procedure/argument combination
+            !successFlag stays false
+            IF Present(trowError) THEN
+                BookErrNo ERR_LATE_BINDING;
+                RAISE ERR_LATE_BINDING;
+            ENDIF
+        ELSE
+            !Success
+            IF Present(successFlag) successFlag:=TRUE;
+        ENDIF
+
+    ERROR
+
+        !Check if error is latebinding
+        IF ERRNO=ERR_REFUNKDAT
+        OR ERRNO=ERR_REFUNKFUN
+        OR ERRNO=ERR_REFUNKPRC
+        OR ERRNO=ERR_CALLPROC
+        THEN
+            !late bidning failed, set flag
+            SkipWarn;
+            procedureExecuted:=FALSE;
+            TRYNEXT;
+        ENDIF
+
+        !If the error came from the late bound procedure, skip trying to handle it
+        IF errorFromLateBinding=FALSE THEN
+
+            ! Failed to reach inheritorParent
+            IF ERRNO=ERR_SYM_ACCESS THEN
+                !Inheritor chain is broken
+                ErrWrite "try() - inheritor chain broken",
+                "unable to reach inheritor in object inheritor chain";
+
+                !Stop executionTimeClock 
+                ClkStop executionTimeClock;
+                IF Present(executionTime) executionTime:=ClkRead(executionTimeClock);
+
+                RAISE ;
+            ENDIF
+
+        ENDIF
+
+        !Stop executionTimeClock 
+        ClkStop executionTimeClock;
+        IF Present(executionTime) executionTime:=ClkRead(executionTimeClock);
+
+        RAISE ;
+
+    ENDPROC
+
+ENDMODULE

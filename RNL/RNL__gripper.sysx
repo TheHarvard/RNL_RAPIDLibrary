@@ -1,0 +1,814 @@
+MODULE RNL__gripper(SYSMODULE)
+
+    !Datatype: gripper
+    !Module with standard methods for the datatype
+
+    !***************************************************************************
+    ! Data
+    !***************************************************************************
+
+    RECORD gripper
+        dataPointer self;
+
+        num time;
+
+        dataPointer di_open_normal;
+        dataPointer di_open_inverted;
+        dataPointer di_open_fault;
+        dataPointer do_open_normal;
+        dataPointer do_open_inverted;
+
+        dataPointer di_close_normal;
+        dataPointer di_close_inverted;
+        dataPointer di_close_fault;
+        dataPointer do_close_normal;
+        dataPointer do_close_inverted;
+
+    ENDRECORD
+
+    CONST errnum ERR_GRIPPER_BAD_SIGNAL:=-1;
+    CONST errnum ERR_GRIPPER_MISSING_SIGNAL:=-1;
+    CONST errnum ERR_GRIPPER_FAULT_SIGNAL:=-1;
+    CONST errnum ERR_GRIPPER_TIMEOUT:=-1;
+
+    !A constant that can be searched for to determine if a datatype module is loaded
+    PERS dataType dataType_gripper:="gripper";
+
+    !Per module setting for whether the list should be used
+    !IF this bool is set to false then the NEW keyword will
+    !will create a stirng value datapointer for this datatype.
+    !If it is set to true, then the NEW keyword will use the pre declared list.
+    LOCAL CONST bool USE_DYNAMIC_DATA_ALLOCATION:=TRUE;
+
+    !INHERITS_FROM is the type that this type inherits from.
+    ! "" signifies no inheritance
+    LOCAL CONST dataType INHERITS_FROM:="baseObject";
+
+    !Null constants
+    CONST gripper gripper_NULL:=[["","",0,"","",0,""],9E9,["","",0,"","",0,""],["","",0,"","",0,""],["","",0,"","",0,""],["","",0,"","",0,""],["","",0,"","",0,""],["","",0,"","",0,""],["","",0,"","",0,""],["","",0,"","",0,""],["","",0,"","",0,""],["","",0,"","",0,""]];
+    LOCAL CONST gripper gripper_DEFAULT:=[["","",0,"","",0,""],0,["","",0,"","",0,""],["","",0,"","",0,""],["","",0,"","",0,""],["","",0,"","",0,""],["","",0,"","",0,""],["","",0,"","",0,""],["","",0,"","",0,""],["","",0,"","",0,""],["","",0,"","",0,""],["","",0,"","",0,""]];
+
+    !Pre declared list to be dynamically allocated
+    LOCAL VAR gripper list{200};
+    !LOCAL VAR num list_lenght:=0;
+
+    !###########################################################################
+    ! NEW Constructor and ERASE Destructor
+    !###########################################################################
+
+    !NEW constructor with initial values
+    FUNC dataPointer NEW_gripper(
+
+        \num time
+
+        \dataPointer di_open_normal
+        \dataPointer di_open_inverted
+        \dataPointer di_open_fault
+        \dataPointer do_open_normal
+        \dataPointer do_open_inverted
+
+        \dataPointer di_close_normal
+        \dataPointer di_close_inverted
+        \dataPointer di_close_fault
+        \dataPointer do_close_normal
+        \dataPointer do_close_inverted
+
+        )
+        VAR dataPointer pointer;
+        VAR gripper data;
+
+        !Allocate and set data
+        NEW pointer;
+
+        !Set initial data 
+        data:=gripper_get(pointer);
+
+        !Data without any setter function here
+        !(Only for datatypes without inheritance)
+        IF Present(time) data.time:=time;
+
+        IF Present(di_open_normal) data.di_open_normal:=di_open_normal;
+        IF Present(di_open_inverted) data.di_open_inverted:=di_open_inverted;
+        IF Present(di_open_fault) data.di_open_fault:=di_open_fault;
+        IF Present(do_open_normal) data.do_open_normal:=do_open_normal;
+        IF Present(do_open_inverted) data.do_open_inverted:=do_open_inverted;
+
+        IF Present(di_close_normal) data.di_close_normal:=di_close_normal;
+        IF Present(di_close_inverted) data.di_close_inverted:=di_close_inverted;
+        IF Present(di_close_fault) data.di_close_fault:=di_close_fault;
+        IF Present(do_close_normal) data.do_close_normal:=do_close_normal;
+        IF Present(do_close_inverted) data.do_close_inverted:=do_close_inverted;
+
+        gripper_set pointer,data;
+
+        !Data with setter functions here:
+
+        !Present(exampleNumber1) setExampleNumber1 pointer exampleNumber1
+        !Present(exampleNumber2) setExampleNumber2 pointer exampleNumber2
+        !Present(exampleNumber3) setExampleNumber3 pointer exampleNumber3
+
+        !Return pointer
+        RETURN pointer;
+    ENDFUNC
+
+    !NEW constructor to allocate a data and return pointer
+    LOCAL PROC NEW(INOUT dataPointer pointer\dataPointer self)
+        VAR gripper data;
+        VAR dataPointer self_;
+        VAR dataPointer inheritanceParent;
+        VAR dataPointer inheritanceParent_Pointer;
+
+        self_:=pointer;
+        IF Present(self) self_:=self;
+
+        data:=gripper_DEFAULT;
+        data.self:=self_;
+
+        IF USE_DYNAMIC_DATA_ALLOCATION=TRUE THEN
+
+            !Set the rmqLocation to this task
+            pointer.rmqLocation:=rmqQueue_SELF();
+
+            !Allocate a list position
+            pointer.type:=Type(list);
+            LIST_gripper_append list,data\index:=pointer.id;
+
+            IF NOT INHERITS_FROM="" THEN
+                !Create nessesary inheritance chain
+                inheritanceParent:=NEW_(INHERITS_FROM);
+                inheritanceParent_Pointer:=NEW_("dataPointer");
+                dataPointer_set inheritanceParent_Pointer,inheritanceParent;
+                pointer.inheritanceParent_id:=inheritanceParent_Pointer.id;
+                pointer.inheritanceParent_name:=inheritanceParent_Pointer.name;
+            ENDIF
+
+        ELSE
+
+            !Create a string value datatype
+            pointer:=gripper_(data);
+        ENDIF
+
+
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !Resolve an RMQ_execute command for this datatype. Return result
+    LOCAL PROC RMQ_execute(INOUT dataPointer pointer,VAR rmqmessage message)
+        VAR gripper data;
+        RMQGetMsgData message,data;
+
+        !Add custom behavior for "executing" this datatype here
+        pointer:=dataPointer_NULL;
+
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !Allocate a data, set the data to recived RMQ message, and return pointer
+    LOCAL PROC RMQ_NEW(INOUT dataPointer pointer,VAR rmqmessage message)
+
+        VAR gripper data;
+        RMQGetMsgData message,data;
+
+        IF USE_DYNAMIC_DATA_ALLOCATION=TRUE THEN
+            NEW pointer;
+            gripper_set pointer,data;
+            RETURN ;
+        ENDIF
+
+        pointer:=gripper_(data);
+
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !Send RMQ message of this datatype
+    LOCAL PROC RMQ_send(INOUT dataPointer data,dataPointer queue,dataPointer code)
+        VAR gripper data_;
+        VAR string queue_;
+        VAR num code_;
+
+        VAR rmqslot slot;
+
+        data_:=gripper_get(data);
+        queue_:=string_get(queue);
+        code_:=num_get(code);
+
+        RMQFindSlot slot,queue_;
+        RMQSendMessage slot,data_\UserDef:=code_;
+
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !Cleans up any datapointer
+    LOCAL PROC ERASE(INOUT dataPointer pointer)
+
+        VAR dataPointer inheritanceParent;
+
+        !Call ERASE on the object that this object inherits from
+        IF pointer.inheritanceParent_name<>""
+            OR pointer.inheritanceParent_id>0 THEN
+            inheritanceParent.id:=pointer.inheritanceParent_id;
+            inheritanceParent.name:=pointer.inheritanceParent_name;
+
+            ERASE_ inheritanceParent;
+        ENDIF
+
+        !ERASE
+        IF dataPointer_isReference(pointer) gripper_set pointer,gripper_NULL;
+        IF dataPointer_isIndex(pointer) LIST_gripper_del list\keepIndexes,pointer.id;
+        pointer:=dataPointer_NULL;
+
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+
+    !¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤
+    ! WRAPPER Methods
+    !¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤
+
+    !¤¤¤ open/close ¤¤¤
+    PROC open_(dataPointer pointer\INOUT bool faultSignalFlag)
+        VAR dataPointer faultSignalFlag_;
+        bool_set faultSignalFlag_,Present(faultSignalFlag);
+        try\obj:=pointer,"open"\arg1_INOUT:=faultSignalFlag_\trowError;
+        IF Present(faultSignalFlag) faultSignalFlag:=bool_get(faultSignalFlag_);
+    ENDPROC
+
+    !¤¤¤ open/close ¤¤¤
+    PROC close_(dataPointer pointer\INOUT bool faultSignalFlag)
+        VAR dataPointer faultSignalFlag_;
+        bool_set faultSignalFlag_,Present(faultSignalFlag);
+        try\obj:=pointer,"close"\arg1_INOUT:=faultSignalFlag_\trowError;
+        IF Present(faultSignalFlag) faultSignalFlag:=bool_get(faultSignalFlag_);
+    ENDPROC
+
+    !===========================================================================
+    ! Public Data/Object Methods
+    !===========================================================================
+
+    !=== open ===
+    LOCAL PROC open(dataPointer pointer,INOUT dataPointer faultSignalFlag)
+        VAR gripper object;
+        VAR num maxTime_:=8388608;
+        VAR num time_:=0;
+        VAR executionMode exeMode;
+        VAR bool fault_signal;
+        VAR bool timeout;
+        VAR bool faultSignalFlag_;
+
+        object:=gripper_get(pointer);
+        exeMode:=getExeMode_(pointer);
+        faultSignalFlag_:=bool_get(faultSignalFlag);
+        fault_signal:=FALSE;
+        timeout:=FALSE;
+
+        IF object.Time<>0 maxTime_:=object.Time;
+        IF object.Time<>0 time_:=object.Time;
+
+        !Set Outputs
+        IF exeMode.disableSignalOutput=FALSE THEN
+            IF dataPointer_isIO(object.do_open_normal) setIO object.do_open_normal,1;
+            IF dataPointer_isIO(object.do_open_inverted) setIO object.do_open_inverted,0;
+        ENDIF
+
+        !Wait for Inputs
+        IF exeMode.simulateSignalInput=FALSE
+        AND dataPointer_isIO(object.di_open_normal)=TRUE
+        AND dataPointer_isIO(object.di_open_inverted)=TRUE
+        THEN
+            WaitUntil(getIO(object.di_open_normal)>=1
+            AND getIO(object.di_open_inverted)>=0)
+            \MaxTime:=maxTime_
+            \TimeFlag:=timeout;
+        ENDIF
+
+        IF exeMode.simulateSignalInput=FALSE
+        AND dataPointer_isIO(object.di_open_normal)=TRUE
+        AND dataPointer_isIO(object.di_open_inverted)=FALSE
+        THEN
+            WaitUntil getIO(object.di_open_normal)>=1
+            \MaxTime:=maxTime_
+            \TimeFlag:=timeout;
+        ENDIF
+
+        IF exeMode.simulateSignalInput=FALSE
+        AND dataPointer_isIO(object.di_open_normal)=FALSE
+        AND dataPointer_isIO(object.di_open_inverted)=TRUE
+        AND object.time>0
+        THEN
+            WaitUntil getIO(object.di_open_normal)>=1
+            \MaxTime:=maxTime_
+            \TimeFlag:=timeout;
+        ENDIF
+
+        IF dataPointer_isIO(object.di_open_normal)=FALSE
+        AND dataPointer_isIO(object.di_open_inverted)=FALSE
+        THEN
+            WaitTime time_;
+        ENDIF
+
+        !Check fault signal
+        IF dataPointer_isIO(object.di_open_fault) THEN
+            IF getIO(object.di_open_fault)>=1 fault_signal:=TRUE;
+        ENDIF
+
+        !Determine if any errors should be sent
+
+        !Fault signal
+        IF faultSignalFlag_=TRUE THEN
+            faultSignalFlag_:=fault_signal;
+        ELSE
+            IF fault_signal errno_bookAndRaise ERR_GRIPPER_FAULT_SIGNAL;
+        ENDIF
+
+        !Timeout
+        IF dataPointer_isIO(object.di_open_normal)=TRUE
+        OR dataPointer_isIO(object.di_open_inverted)=TRUE
+        THEN
+            IF timeout errno_bookAndRaise ERR_GRIPPER_TIMEOUT;
+        ENDIF
+
+        !Set data
+        bool_set faultSignalFlag,faultSignalFlag_;
+
+    ERROR
+        RAISE ;
+    ENDPROC
+
+    !=== close ===
+    LOCAL PROC close(dataPointer pointer,INOUT dataPointer faultSignalFlag)
+        VAR gripper object;
+        VAR num maxTime_:=8388608;
+        VAR num time_:=0;
+        VAR executionMode exeMode;
+        VAR bool fault_signal;
+        VAR bool timeout;
+        VAR bool faultSignalFlag_;
+
+        object:=gripper_get(pointer);
+        exeMode:=getExeMode_(pointer);
+        faultSignalFlag_:=bool_get(faultSignalFlag);
+        fault_signal:=FALSE;
+        timeout:=FALSE;
+
+        IF object.Time<>0 maxTime_:=object.Time;
+        IF object.Time<>0 time_:=object.Time;
+
+        !Set Outputs
+        IF exeMode.disableSignalOutput=FALSE THEN
+            IF dataPointer_isIO(object.do_close_normal) setIO object.do_close_normal,1;
+            IF dataPointer_isIO(object.do_close_inverted) setIO object.do_close_inverted,0;
+        ENDIF
+
+        !Wait for Inputs
+        IF exeMode.simulateSignalInput=FALSE
+        AND dataPointer_isIO(object.di_close_normal)=TRUE
+        AND dataPointer_isIO(object.di_close_inverted)=TRUE
+        THEN
+            WaitUntil(getIO(object.di_close_normal)>=1
+            AND getIO(object.di_close_inverted)>=0)
+            \MaxTime:=maxTime_
+            \TimeFlag:=timeout;
+        ENDIF
+
+        IF exeMode.simulateSignalInput=FALSE
+        AND dataPointer_isIO(object.di_close_normal)=TRUE
+        AND dataPointer_isIO(object.di_close_inverted)=FALSE
+        THEN
+            WaitUntil getIO(object.di_close_normal)>=1
+            \MaxTime:=maxTime_
+            \TimeFlag:=timeout;
+        ENDIF
+
+        IF exeMode.simulateSignalInput=FALSE
+        AND dataPointer_isIO(object.di_close_normal)=FALSE
+        AND dataPointer_isIO(object.di_close_inverted)=TRUE
+        AND object.time>0
+        THEN
+            WaitUntil getIO(object.di_close_normal)>=1
+            \MaxTime:=maxTime_
+            \TimeFlag:=timeout;
+        ENDIF
+
+        IF dataPointer_isIO(object.di_close_normal)=FALSE
+        AND dataPointer_isIO(object.di_close_inverted)=FALSE
+        THEN
+            WaitTime time_;
+        ENDIF
+
+        !Check fault signal
+        IF dataPointer_isIO(object.di_close_fault) THEN
+            IF getIO(object.di_close_fault)>=1 fault_signal:=TRUE;
+        ENDIF
+
+        !Determine if any errors should be sent
+
+        !Fault signal
+        IF faultSignalFlag_=TRUE THEN
+            faultSignalFlag_:=fault_signal;
+        ELSE
+            IF fault_signal errno_bookAndRaise ERR_GRIPPER_FAULT_SIGNAL;
+        ENDIF
+
+        !Timeout
+        IF dataPointer_isIO(object.di_close_normal)=TRUE
+        OR dataPointer_isIO(object.di_close_inverted)=TRUE
+        THEN
+            IF timeout errno_bookAndRaise ERR_GRIPPER_TIMEOUT;
+        ENDIF
+
+        !Set data
+        bool_set faultSignalFlag,faultSignalFlag_;
+
+    ERROR
+        RAISE ;
+    ENDPROC
+
+    !---------------------------------------------------------------------------
+    ! Auxiliary Methods
+    !---------------------------------------------------------------------------
+
+    !///////////////////////////////////////////////////////////////////////////
+    ! Privat Data/Object Methods
+    !///////////////////////////////////////////////////////////////////////////
+
+    !+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+    ! Event Responses
+    !+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+    !$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+    ! States
+    !$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+    !&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+    ! Getter and Setter Methods
+    !&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+
+    !&&& set signals &&&
+    PROC set_di_open_normal(dataPointer pointer,dataPointer signal)
+        VAR gripper object;
+        object:=gripper_get(pointer);
+        object.di_open_normal:=signal;
+        gripper_set pointer,object;
+    ENDPROC
+
+    PROC set_di_open_inverted(dataPointer pointer,dataPointer signal)
+        VAR gripper object;
+        object:=gripper_get(pointer);
+        object.di_open_inverted:=signal;
+        gripper_set pointer,object;
+    ENDPROC
+
+    PROC set_di_open_fault(dataPointer pointer,dataPointer signal)
+        VAR gripper object;
+        object:=gripper_get(pointer);
+        object.di_open_fault:=signal;
+        gripper_set pointer,object;
+    ENDPROC
+
+    PROC set_do_open_normal(dataPointer pointer,dataPointer signal)
+        VAR gripper object;
+        object:=gripper_get(pointer);
+        object.do_open_normal:=signal;
+        gripper_set pointer,object;
+    ENDPROC
+
+    PROC set_do_open_inverted(dataPointer pointer,dataPointer signal)
+        VAR gripper object;
+        object:=gripper_get(pointer);
+        object.do_open_inverted:=signal;
+        gripper_set pointer,object;
+    ENDPROC
+
+    PROC set_di_close_normal(dataPointer pointer,dataPointer signal)
+        VAR gripper object;
+        object:=gripper_get(pointer);
+        object.di_close_normal:=signal;
+        gripper_set pointer,object;
+    ENDPROC
+
+    PROC set_di_close_inverted(dataPointer pointer,dataPointer signal)
+        VAR gripper object;
+        object:=gripper_get(pointer);
+        object.di_close_inverted:=signal;
+        gripper_set pointer,object;
+    ENDPROC
+
+    PROC set_di_close_fault(dataPointer pointer,dataPointer signal)
+        VAR gripper object;
+        object:=gripper_get(pointer);
+        object.di_close_fault:=signal;
+        gripper_set pointer,object;
+    ENDPROC
+
+    PROC set_do_close_normal(dataPointer pointer,dataPointer signal)
+        VAR gripper object;
+        object:=gripper_get(pointer);
+        object.do_close_normal:=signal;
+        gripper_set pointer,object;
+    ENDPROC
+
+    PROC set_do_close_inverted(dataPointer pointer,dataPointer signal)
+        VAR gripper object;
+        object:=gripper_get(pointer);
+        object.do_close_inverted:=signal;
+        gripper_set pointer,object;
+    ENDPROC
+
+    !&&& get signals &&&
+    PROC get_di_open_normal(dataPointer pointer,INOUT dataPointer signal)
+        VAR gripper object;
+        object:=gripper_get(pointer);
+        signal:=object.di_open_normal;
+        gripper_set pointer,object;
+    ENDPROC
+
+    PROC get_di_open_inverted(dataPointer pointer,INOUT dataPointer signal)
+        VAR gripper object;
+        object:=gripper_get(pointer);
+        signal:=object.di_open_inverted;
+        gripper_set pointer,object;
+    ENDPROC
+
+    PROC get_di_open_fault(dataPointer pointer,INOUT dataPointer signal)
+        VAR gripper object;
+        object:=gripper_get(pointer);
+        signal:=object.di_open_fault;
+        gripper_set pointer,object;
+    ENDPROC
+
+    PROC get_do_open_normal(dataPointer pointer,INOUT dataPointer signal)
+        VAR gripper object;
+        object:=gripper_get(pointer);
+        signal:=object.do_open_normal;
+        gripper_set pointer,object;
+    ENDPROC
+
+    PROC get_do_open_inverted(dataPointer pointer,INOUT dataPointer signal)
+        VAR gripper object;
+        object:=gripper_get(pointer);
+        signal:=object.do_open_inverted;
+        gripper_set pointer,object;
+    ENDPROC
+
+    PROC get_di_close_normal(dataPointer pointer,INOUT dataPointer signal)
+        VAR gripper object;
+        object:=gripper_get(pointer);
+        signal:=object.di_close_normal;
+        gripper_set pointer,object;
+    ENDPROC
+
+    PROC get_di_close_inverted(dataPointer pointer,INOUT dataPointer signal)
+        VAR gripper object;
+        object:=gripper_get(pointer);
+        signal:=object.di_close_inverted;
+        gripper_set pointer,object;
+    ENDPROC
+
+    PROC get_di_close_fault(dataPointer pointer,INOUT dataPointer signal)
+        VAR gripper object;
+        object:=gripper_get(pointer);
+        signal:=object.di_close_fault;
+        gripper_set pointer,object;
+    ENDPROC
+
+    PROC get_do_close_normal(dataPointer pointer,INOUT dataPointer signal)
+        VAR gripper object;
+        object:=gripper_get(pointer);
+        signal:=object.do_close_normal;
+        gripper_set pointer,object;
+    ENDPROC
+
+    PROC get_do_close_inverted(dataPointer pointer,INOUT dataPointer signal)
+        VAR gripper object;
+        object:=gripper_get(pointer);
+        signal:=object.do_close_inverted;
+        gripper_set pointer,object;
+    ENDPROC
+
+    !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    ! Standardized Methods
+    !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    !%%%% Initialize the list %%%%
+
+    !Initialize the list
+    LOCAL PROC config()
+        LIST_gripper_clear list;
+    ENDPROC
+
+    !%%%% Direct Access to list %%%%
+
+    !Allow acces to list
+    FUNC gripper gripper_list(num i)
+        RETURN list{i};
+    ENDFUNC
+
+    !Allow access to list lenght
+    FUNC num gripper_lenght()
+        !RETURN list_lenght;
+        RETURN LIST_gripper_lenght(list);
+    ENDFUNC
+
+    !%%%% Event Handler %%%%
+
+    !event_handler is the default target for events subscribed to this object
+    LOCAL PROC event_handler(dataPointer pointer,dataPointer eventNote)
+        !Add default event handeling here
+    ENDPROC
+
+    !%%%% DataPointer methods %%%%
+
+    !Set a datapointers value
+    PROC gripper_set(INOUT dataPointer pointer,gripper value)
+        IF dataPointer_isReference(pointer) SetDataVal pointer.name,value;
+        IF dataPointer_isReference(pointer) RETURN ;
+        IF dataPointer_isValue(pointer) pointer.value:=ValToStr(value);
+        IF dataPointer_isValue(pointer) RETURN ;
+        IF dataPointer_isIndex(pointer) list{pointer.id}:=value;
+        IF dataPointer_isIndex(pointer) RETURN ;
+        !If the pointer is none of the above, create a new pointer with string val
+        IF NOT USE_DYNAMIC_DATA_ALLOCATION pointer:=gripper_(value);
+        IF NOT USE_DYNAMIC_DATA_ALLOCATION RETURN ;
+        !ERROR
+        !Data Pointer Not set up
+        errno_bookAndRaise ERR_BAD_DATA_POINTER;
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !Get a datapointers value
+    FUNC gripper gripper_get(dataPointer pointer)
+        VAR gripper returnValue;
+        returnValue:=gripper_NULL;
+        IF dataPointer_isReference(pointer) GetDataVal pointer.name,returnValue;
+        IF dataPointer_isValue(pointer) errFromBool StrToVal(pointer.value,returnValue),ERR_SYM_ACCESS;
+        IF dataPointer_isIndex(pointer) returnValue:=list{pointer.id};
+        RETURN returnValue;
+    ERROR
+        !RAISE ;
+    ENDFUNC
+
+    !Method for to create a value-datapointer from a value, or that points to a value
+    FUNC dataPointer gripper_(gripper value\switch asReference)
+        VAR dataPointer pointer;
+        pointer.type:=Type(value);
+        IF Present(asReference) pointer.name:=ArgName(value);
+        IF NOT Present(asReference) pointer.value:=ValToStr(value);
+        RETURN pointer;
+    ERROR
+        !RAISE ;
+    ENDFUNC
+
+    ! %%%% LIST methods %%%%
+
+    !Initialize new list
+    PROC LIST_gripper_clear(
+        INOUT gripper list{*}
+        \INOUT num lenght)
+
+        FOR i FROM 1 TO Dim(list,1) DO
+            list{i}:=gripper_NULL;
+        ENDFOR
+
+        IF Present(lenght) lenght:=0;
+
+    ENDPROC
+
+    !Append a datapointer to the list
+    !The optional argument index will be set to the index that was used
+    PROC LIST_gripper_append(
+        INOUT gripper list{*}
+        \INOUT num lenght,
+        gripper item
+        \INOUT num index)
+
+        !Reject null input
+        IF item=gripper_NULL errno_bookAndRaise(ERR_UNEXPECTED_NULL);
+
+        IF NOT Present(lenght) THEN
+            FOR i FROM 1 TO Dim(list,1) DO
+                IF list{i}=gripper_NULL THEN
+                    list{i}:=item;
+                    IF Present(index) index:=i;
+                    RETURN ;
+                ENDIF
+            ENDFOR
+            RETURN ;
+        ENDIF
+
+        lenght:=lenght+1;
+        list{lenght}:=item;
+        IF Present(index) index:=lenght;
+
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !Pop the last data pointer in the list
+    !Or if index is specified, pops the index
+    FUNC gripper LIST_gripper_pop(
+        INOUT gripper list{*}
+        \INOUT num lenght,
+        \num index)
+
+        VAR gripper item;
+
+        !Reject indexes ouside of lenght
+        IF Present(lenght) AND Present(index) THEN
+            IF index>lenght errno_bookAndRaise(ERR_LIST_OUT_OF_RANGE);
+        ENDIF
+
+        !Pop at spesific index
+        IF Present(index) THEN
+            item:=list{index};
+            list{index}:=gripper_NULL;
+            LIST_gripper_del list\lenght?lenght,\keepIndexes,index;
+            RETURN item;
+        ENDIF
+
+        !Pop at last index, without lenght
+        IF NOT Present(lenght) THEN
+            FOR i FROM Dim(list,1) TO 1 DO
+                IF list{i}<>gripper_NULL THEN
+                    item:=list{i};
+                    list{i}:=gripper_NULL;
+                    RETURN item;
+                ENDIF
+            ENDFOR
+        ENDIF
+
+        !Pop at last index, with lenght
+        item:=list{lenght};
+        list{lenght}:=gripper_NULL;
+        lenght:=lenght-1;
+        RETURN item;
+
+    ERROR
+        !RAISE ;
+    ENDFUNC
+
+    !Delete an item at a position of the list
+    PROC LIST_gripper_del(
+        INOUT gripper list{*}
+        \INOUT num lenght
+        \switch keepIndexes,
+        num index)
+
+        !Reject indexes ouside of lenght
+        IF Present(lenght) AND Present(index) THEN
+            IF index>lenght errno_bookAndRaise(ERR_LIST_OUT_OF_RANGE);
+        ENDIF
+
+        !Delet data
+        list{index}:=gripper_NULL;
+
+        !If indexes should be keept, then don't shift any data around
+        IF Present(keepIndexes) RETURN ;
+
+        !Shift down the above items to close gap, without lenght
+        IF NOT Present(lenght) THEN
+            FOR i FROM index TO Dim(list,1)-1 DO
+                list{index}:=list{index+1};
+            ENDFOR
+            list{Dim(list,1)}:=gripper_NULL;
+            RETURN ;
+        ENDIF
+
+        !Shift down the above items to close gap, with lenght
+        FOR i FROM index TO lenght-1 DO
+            list{index}:=list{index+1};
+        ENDFOR
+        list{lenght}:=gripper_NULL;
+        lenght:=lenght-1;
+
+    ERROR
+        IF ERRNO=ERR_LIST_OUT_OF_RANGE RAISE ERR_LIST_OUT_OF_RANGE;
+        !RAISE ;
+    ENDPROC
+
+    !Returns the number of items actively used in the list (not null)
+    FUNC num LIST_gripper_lenght(INOUT gripper list{*})
+        VAR num lenght;
+        lenght:=0;
+
+        FOR i FROM 1 TO Dim(list,1) DO
+            IF list{i}<>gripper_NULL THEN
+                lenght:=lenght+1;
+            ENDIF
+        ENDFOR
+
+        RETURN lenght;
+    ERROR
+        !RAISE ;
+    ENDFUNC
+
+    !xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    ! Examples
+    !xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+ENDMODULE

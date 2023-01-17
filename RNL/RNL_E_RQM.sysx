@@ -1,0 +1,653 @@
+MODULE RNL_E_RQM(SYSMODULE)
+
+    !This module manages RQM
+
+    ! proc try - send execute instruction and wait for Reply
+    ! func RMQ_Start - send execute instruction
+    ! func RMQ_Wait - wait execute instruction for Reply
+    !
+    !
+    !
+
+    ! This config needs to be set up in the roobot conf.
+    !  -Name "T_ROB1" -Type "NORMAL" -MotionTask  -RmqType "Remote"\
+    !  -RmqMode "Synchronous" -RmqMaxMsgSize 3000 -RmqMaxNoOfMsg 10
+
+
+    ALIAS string rmqQueue;
+
+    !The RMQ code is sen along RMQ messages, and consists of a total of 15 bits.
+    !The highest 2 bits signify the instruction (rmqCode_Instruction)
+    !The lower 13 bit signify a uniqe identifier (id) for the spesific instriction (rmqCode_id)
+    ALIAS num rmqCode;
+    ALIAS num rmqCode_Instruction;
+    ALIAS num rmqCode_id;
+
+    CONST rmqQueue rmqQueue_NULL:="";
+
+
+    !Instructions are different kinds of RMQ messages that do different things:
+    !Call event with recived data (event determined by code ID)
+    CONST rmqCode_Instruction rmq_inst_EVENT:=0;
+    !Execute the recived data (handeled differently for each data)
+    CONST rmqCode_Instruction rmq_inst_EXECUTE:=1;
+    !Allocate recived data (call the NEW keyword and return the datapointer)
+    CONST rmqCode_Instruction rmq_inst_ALLOCATE:=2;
+    !This is a response to an instruction, and not an instruction
+    CONST rmqCode_Instruction rmq_inst_RESPONSE:=3;
+
+    !Data used to generate uniqe rmqCode_id
+    CONST rmqCode_id rmqCode_id_MAX:=8191;
+    PERS rmqCode_id rmqCode_id_LAST;
+    CONST rmqCode_id rmqCode_id_MIN:=1;
+
+    !ERRORS
+    VAR errnum ERR_RMQ_BAD_INSTRUCTION:=-1;
+
+    !Global RMQ queue of 
+    LOCAL VAR rmqmessage RMQmessage_queue{5};
+    LOCAL VAR num RMQmessage_queue_order{5}:=[0,0,0,0,0];
+
+    !Local RMQ queue (longer than the global queue)
+    LOCAL VAR rmqLocalMessage LocalRMQQueue{500};
+    LOCAL VAR num LocalRMQQueue_lenght:=0;
+
+    !Send an event over RMQ
+    PROC RMQ_event(rmqQueue queue,event e,\dataPointer data)
+
+        VAR rmqLocalMessage localMessage;
+
+        localMessage.queue:=queue;
+        localMessage.id:=e.id;
+        localMessage.instruction:=rmq_inst_EVENT;
+        IF Present(data) localMessage.data:=data;
+
+        rmqLocalMessage_send localMessage;
+
+    ERROR
+        !If the reciever of an event fails, ignore it
+        IF ERRNO=ERR_RMQ_NAME TRYNEXT;
+        IF ERRNO=ERR_RMQ_FULL TRYNEXT;
+    ENDPROC
+
+    PROC RMQ_executeQueuedMessages()
+
+        !Empty queue into local queue
+        RMQ_bufferToLocalQueue;
+
+        !Loop through and handle all messages
+        WHILE RMQ_handleNextMessage() DO
+            RMQ_bufferToLocalQueue;
+        ENDWHILE
+
+    ENDPROC
+
+
+    !Handles the next message in the queue
+    FUNC bool RMQ_handleNextMessage()
+
+        VAR rmqLocalMessage localMessage;
+        VAR dataPointer rmqPointer;
+        VAR bool successFlag;
+        VAR event e;
+
+        VAR bool pendingReply:=FALSE;
+        VAR dataPointer responseData;
+
+
+        !Check if any EXECUTE or EVENT instructions are in the queue
+        localMessage:=RMQ_queue_popNextExecuteOrEvent(\successFlag:=successFlag);
+
+        IF successFlag=TRUE THEN
+
+
+            IF localMessage.instruction=rmq_inst_EVENT THEN
+
+                !Get the source
+                rmqPointer.rmqLocation:=localMessage.queue;
+
+                !Execute the event instruction 
+                e.id:=localMessage.id;
+                TRIGGER
+                    \object:=rmqPointer,
+                    e
+                    \data:=localMessage.data;
+            ENDIF
+
+            IF localMessage.instruction=rmq_inst_EXECUTE THEN
+                !Execute the execute instruction
+                IF localMessage.id<>0 pendingReply:=TRUE;
+                try\obj:=localMessage.data,"RMQ_execute"\trowError;
+
+                !Send reply
+                IF pendingReply THEN
+                    RMQ_send
+                        localMessage.data,
+                        localMessage.queue,
+                        get_rmqcode(rmq_inst_RESPONSE,localMessage.id);
+                    pendingReply:=FALSE;
+                ENDIF
+            ENDIF
+
+            !Clean up pointer
+            ERASE_ localMessage.data;
+
+            RETURN TRUE;
+        ENDIF
+
+        RETURN FALSE;
+
+
+    ERROR
+        !In case of an error, send a response containing the error
+        IF pendingReply THEN
+            responseData:=NEW_errInfo();
+            RMQ_send
+                responseData,
+                localMessage.queue,
+                get_rmqcode(rmq_inst_RESPONSE,localMessage.id);
+            ERASE responseData;
+            pendingReply:=FALSE;
+
+            !Clean up pointer
+            ERASE_ localMessage.data;
+
+            RETURN TRUE;
+        ENDIF
+
+    UNDO
+        !In case of an undo, send an empty response
+        IF pendingReply THEN
+            RMQ_send
+                localMessage.data,
+                localMessage.queue,
+                get_rmqcode(rmq_inst_RESPONSE,localMessage.id);
+            pendingReply:=FALSE;
+
+            !Clean up pointer
+            ERASE_ localMessage.data;
+
+        ENDIF
+
+    ENDFUNC
+
+
+    !Send
+    PROC rmqLocalMessage_send(rmqLocalMessage localMessage)
+
+        VAR rmqCode code;
+
+        code:=get_rmqcode(localMessage.instruction,localMessage.id);
+
+        !Break ;
+
+        RMQ_send localMessage.data,localMessage.queue,code;
+
+    ERROR
+        IF ERRNO=ERR_RMQ_NAME RAISE ERR_RMQ_NAME;
+        IF ERRNO=ERR_RMQ_FULL RAISE ERR_RMQ_FULL;
+    ENDPROC
+
+
+    !Returns true if the spesified response is in the local queue
+    LOCAL FUNC bool RMQ_queue_hasResponse(rmqCode_id responseID,\INOUT num index)
+        IF LocalRMQQueue_lenght>0 THEN
+            FOR i FROM 1 TO LocalRMQQueue_lenght DO
+                IF LocalRMQQueue{i}.instruction=rmq_inst_RESPONSE
+            AND LocalRMQQueue{i}.id=responseID THEN
+                    IF Present(index) index:=i;
+                    RETURN TRUE;
+                ENDIF
+            ENDFOR
+        ENDIF
+        RETURN FALSE;
+    ENDFUNC
+
+
+    !Returns true if the spesified response is in the local queue
+    LOCAL FUNC rmqLocalMessage RMQ_queue_popNextEvent(\INOUT bool successFlag)
+        VAR rmqLocalMessage nextEvent;
+        IF Present(successFlag) successFlag:=FALSE;
+        IF LocalRMQQueue_lenght>0 THEN
+            FOR i FROM 1 TO LocalRMQQueue_lenght DO
+                IF LocalRMQQueue{i}.instruction=rmq_inst_EVENT THEN
+                    nextEvent:=LIST_rmqLocalMessage_pop(
+                    LocalRMQQueue
+                    \lenght:=LocalRMQQueue_lenght
+                    \index:=i);
+                    IF Present(successFlag) successFlag:=TRUE;
+                    RETURN nextEvent;
+                ENDIF
+            ENDFOR
+        ENDIF
+        RETURN rmqLocalMessage_NULL;
+    ENDFUNC
+
+
+    !Returns true if the spesified response is in the local queue
+    LOCAL FUNC rmqLocalMessage RMQ_queue_popNextExecute(\INOUT bool successFlag)
+        VAR rmqLocalMessage nextEvent;
+        IF LocalRMQQueue_lenght>0 THEN
+            IF Present(successFlag) successFlag:=FALSE;
+            FOR i FROM 1 TO LocalRMQQueue_lenght DO
+                IF LocalRMQQueue{i}.instruction=rmq_inst_EXECUTE THEN
+                    nextEvent:=LIST_rmqLocalMessage_pop(
+                    LocalRMQQueue
+                    \lenght:=LocalRMQQueue_lenght
+                    \index:=i);
+                    IF Present(successFlag) successFlag:=FALSE;
+                    RETURN nextEvent;
+                ENDIF
+            ENDFOR
+        ENDIF
+        RETURN rmqLocalMessage_NULL;
+    ENDFUNC
+
+
+    !Returns true if the spesified response is in the local queue
+    LOCAL FUNC rmqLocalMessage RMQ_queue_popNextExecuteOrEvent(\INOUT bool successFlag)
+        VAR rmqLocalMessage nextEvent;
+        IF Present(successFlag) successFlag:=FALSE;
+        IF LocalRMQQueue_lenght>0 THEN
+            FOR i FROM 1 TO LocalRMQQueue_lenght DO
+                IF LocalRMQQueue{i}.instruction=rmq_inst_EXECUTE
+            OR LocalRMQQueue{i}.instruction=rmq_inst_EVENT THEN
+                    nextEvent:=LIST_rmqLocalMessage_pop(
+                    LocalRMQQueue
+                    \lenght:=LocalRMQQueue_lenght
+                    \index:=i);
+                    IF Present(successFlag) successFlag:=TRUE;
+                    RETURN nextEvent;
+                ENDIF
+            ENDFOR
+        ENDIF
+        RETURN rmqLocalMessage_NULL;
+    ENDFUNC
+
+
+    !buffer the RMQ queue, and move it into the LocalRMQQueue
+    PROC RMQ_bufferToLocalQueue()
+
+        !VAR rmqmessage message;
+        VAR rmqheader header;
+        VAR rmqslot slot;
+        VAR rmqCode code;
+        VAR rmqLocalMessage localMessage;
+
+        VAR bool NEW_failed:=FALSE;
+        VAR rmqCode responseCode;
+
+        VAR errorData errData;
+
+        VAR num nextPrioritizedMessage;
+        VAR bool messageQueued;
+
+        !WHILE TRUE DO
+
+        !Pop the topmost message from the global queue
+        !OR, if no message, return 
+
+        !Find next priority, aka the index with lowest number
+        nextPrioritizedMessage:=0;
+        FOR i FROM 1 TO Dim(RMQmessage_queue,1) DO
+            IF RMQmessage_queue_order{i}>0 THEN
+                IF nextPrioritizedMessage=0 THEN
+                    nextPrioritizedMessage:=i;
+                ELSE
+                    IF RMQmessage_queue_order{i}<RMQmessage_queue_order{nextPrioritizedMessage}
+                        nextPrioritizedMessage:=i;
+                ENDIF
+            ENDIF
+        ENDFOR
+
+        IF nextPrioritizedMessage<1 RETURN ;
+        ! RMQmessage_queue{nextPriority} is now the active message
+
+        !Get header
+        RMQGetMsgHeader RMQmessage_queue{nextPrioritizedMessage}
+            \header:=header
+            \SenderId:=slot
+            \UserDef:=code;
+
+        localMessage.header:=header;
+
+        !Get sender
+        localMessage.queue:=RMQGetSlotName(slot);
+
+
+        TPWrite "Recived "+NumToStr(code,0);
+
+        !Get code(s)
+        localMessage.instruction:=get_rmqCode_Instruction(code);
+        localMessage.id:=get_rmqCode_id(code);
+
+        !Check for ID collisions, and skip ahead if too close
+        !(Assumes that the id codes are used in order on both ends)
+        IF localMessage.id<rmqCode_id_LAST+100
+            AND localMessage.id>rmqCode_id_LAST-100 THEN
+            rmqCode_id_LAST:=rmqCode_id_LAST+500;
+        ENDIF
+
+        !Allocate and save data
+        IF header.datatype="" THEN
+            !No datatype given
+            localMessage.data:=dataPointer_NULL;
+
+        ELSEIF header.datatype=Type(dataPointer_NULL) THEN
+            RMQGetMsgData RMQmessage_queue{nextPrioritizedMessage},localMessage.data;
+
+        ELSE
+            localMessage.data:=NEW_(header.datatype\RMQ_message:=RMQmessage_queue{nextPrioritizedMessage});
+        ENDIF
+
+        IF NEW_failed THEN
+            !IF the NEW command failed, return failure data to sender
+
+            responseCode:=get_rmqcode(rmq_inst_RESPONSE,localMessage.id);
+            RMQSendMessage slot,errData\UserDef:=responseCode;
+            RMQAnnounceNewMessage;
+
+        ELSEIF localMessage.instruction=rmq_inst_ALLOCATE THEN
+            !IF the instruction was an allocate instruction, then we can
+            !Reply now
+
+            responseCode:=get_rmqcode(rmq_inst_RESPONSE,localMessage.id);
+            RMQSendMessage slot,localMessage.data\UserDef:=responseCode;
+            RMQAnnounceNewMessage;
+
+        ELSE
+            !Otherwise we need to add this local message to the local queue
+
+            LIST_rmqLocalMessage_append
+                LocalRMQQueue
+                \lenght:=LocalRMQQueue_lenght,
+                localMessage;
+
+        ENDIF
+
+        !Remove the message from the global queue
+        RMQmessage_queue_order{nextPrioritizedMessage}:=0;
+
+        !Add logging here for logging all incoming RMQ traffic
+
+        !Clean up stale replies.
+        IF LocalRMQQueue_lenght>(Dim(LocalRMQQueue,1)-10) THEN
+            ErrWrite "LocalRMQQueue is almost full","Cleaning up first 20% of old responses to make space"
+                \RL2:="Check if the program is reciving replies it is not expecting";
+            Stop;
+            FOR i FROM 1 TO Dim(LocalRMQQueue,1) DIV 5 DO
+                IF LocalRMQQueue{i}.instruction=rmq_inst_RESPONSE THEN
+                    LIST_rmqLocalMessage_del LocalRMQQueue\lenght:=LocalRMQQueue_lenght,i;
+                ENDIF
+            ENDFOR
+        ENDIF
+
+        !ENDWHILE
+
+    ERROR
+
+        IF ERRNO=ERR_RMQ_TIMEOUT THEN
+            !Queue is empty
+            SkipWarn;
+            RETURN ;
+        ENDIF
+
+        IF ERRNO=ERR_BAD_DATA_TYPE THEN
+            !Incoming datatype is invalid
+            SkipWarn;
+            NEW_failed:=TRUE;
+            TRYNEXT;
+        ENDIF
+
+        !RAISE ;
+    ENDPROC
+
+
+    !RMQ code
+
+    LOCAL FUNC rmqCode get_rmqcode(rmqCode_Instruction instruction,rmqCode_id id)
+        RETURN (instruction*8192)+id;
+    ENDFUNC
+
+    LOCAL FUNC rmqCode_Instruction get_rmqCode_Instruction(rmqCode code)
+        RETURN DnumToNum(BitRShDnum(NumToDnum(code),13));
+    ENDFUNC
+
+    LOCAL FUNC rmqCode_id get_rmqCode_id(rmqCode code)
+        RETURN code-(get_rmqCode_Instruction(code)*8192);
+    ENDFUNC
+
+
+    !RMQ Start and Wait
+
+    !Send a RMQ execute command, and get a id that can be used to wait for the response
+    FUNC rmqCode_id RMQ_start(
+        rmqQueue queue,
+        dataPointer data
+        \switch allocate
+        \switch skipResponse,
+        \switch sendAsPointer,
+        \switch cleanUpPointer)
+
+        VAR rmqCode_id id;
+        VAR rmqCode_Instruction instruction;
+        VAR rmqCode code;
+
+        VAR bool successFlag:=FALSE;
+        VAR rmqslot slot;
+
+        !Create ID
+        IF Present(skipResponse) THEN
+            id:=0;
+        ELSE
+            id:=rmqCode_id_generate();
+        ENDIF
+
+        !Set instruction
+        instruction:=rmq_inst_EXECUTE;
+        IF Present(allocate) instruction:=rmq_inst_ALLOCATE;
+
+        code:=get_rmqcode(instruction,id);
+
+        !Call RMQ send method on this spesific datatype
+        IF NOT Present(sendAsPointer) THEN
+            try\obj:=data,"RMQ_send"
+            \arg1:=string_(queue)
+            \arg2:=num_(code)
+            \successFlag:=successFlag;
+        ENDIF
+
+        !sendAsPointer - send data as pointer
+        !OR failed to call RMQ_send method, Try to send directly as datapointer
+        IF Present(sendAsPointer)
+        OR (successFlag=FALSE AND dataPointer_isValue(data)) THEN
+            RMQFindSlot slot,queue;
+            RMQSendMessage slot,data\UserDef:=code;
+            RMQAnnounceNewMessage;
+            successFlag:=TRUE;
+        ENDIF
+
+        !Cleanup
+        IF Present(cleanUpPointer) THEN
+            !ERASE the pointer
+            ERASE_ data;
+            data:=dataPointer_NULL;
+        ENDIF
+
+        IF successFlag=TRUE THEN
+            RETURN id;
+        ELSE
+            !ERROR
+        ENDIF
+
+
+    ENDFUNC
+
+    !Wait for a spesific RMQ response
+    FUNC dataPointer RMQ_wait(
+        rmqCode_id responseID,
+        \switch exclusive
+        \num maxTime
+        \INOUT bool TimeFlag)
+
+        VAR rmqLocalMessage localMessage;
+        VAR num index;
+
+        VAR clock waitClock;
+        ClkStart waitClock;
+
+        IF Present(TimeFlag) TimeFlag:=FALSE;
+
+        !Wait until response arrives
+        WHILE TRUE DO
+
+            !Check if reply is ready
+            IF RMQ_queue_hasResponse(responseID\index:=index) THEN
+                localMessage:=LIST_rmqLocalMessage_pop(
+                LocalRMQQueue,
+                \lenght:=LocalRMQQueue_lenght,
+                \index:=index);
+                RETURN localMessage.data;
+            ENDIF
+
+            !Check if timeout
+            IF Present(maxTime) THEN
+                IF ClkRead(waitClock)>maxTime THEN
+                    IF Present(TimeFlag) THEN
+                        TimeFlag:=TRUE;
+                        RETURN dataPointer_NULL;
+                    ELSE
+                        RAISE ERR_WAIT_MAXTIME;
+                    ENDIF
+                ENDIF
+            ENDIF
+
+            !            !Call main to process other incoming events
+            !            !Or if exclusive is included, then just buffer the RMQ queue
+            !            IF NOT Present(exclusive) THEN
+            !                RNL_main;
+            !            ELSE
+            Stop;
+            RMQ_bufferToLocalQueue;
+            !            ENDIF
+
+        ENDWHILE
+
+    ENDFUNC
+
+
+
+
+    !RMQ_send sends a message
+    PROC RMQ_send_(INOUT dataPointer data,dataPointer queue,dataPointer code)
+        RMQ_send data,string_get(queue),num_get(code);
+
+    ERROR
+        IF ERRNO=ERR_RMQ_NAME RAISE ERR_RMQ_NAME;
+        IF ERRNO=ERR_RMQ_FULL RAISE ERR_RMQ_FULL;
+    ENDPROC
+
+    PROC RMQ_send(INOUT dataPointer data,rmqQueue queue,rmqCode code)
+
+        VAR rmqslot slot;
+
+        !If datatype is null, force it to be dataPointer
+        IF data.type="" data.type:=Type(dataPointer_NULL);
+
+        try\obj:=data,"RMQ_send"
+            \arg1:=string_(queue)
+            \arg2:=num_(code)
+            \trowError;
+
+        RMQAnnounceNewMessage;
+
+    ERROR
+        IF ERRNO=ERR_RMQ_NAME RAISE ERR_RMQ_NAME;
+        IF ERRNO=ERR_RMQ_FULL RAISE ERR_RMQ_FULL;
+    ENDPROC
+
+
+    !RMQ_receive_ is responsible for receieving RMQ messagesduring an interrupt
+    PROC RMQ_receive_()
+
+        VAR num nextPriority:=1;
+        VAR bool messageQueued:=FALSE;
+        VAR rmqmessage message;
+        VAR rmqslot slot;
+        VAR rmqheader header;
+        VAR num UserDef;
+        VAR errInfo errInfo_RMQ_queue_full:=["RMQ queue full",0,"RMQ queue full","","","RMQ queue full","","","","",""];
+
+        !Find next priority, aka a number higher than all the other numbers
+        FOR i FROM 1 TO Dim(RMQmessage_queue,1) DO
+            IF RMQmessage_queue_order{i}>=nextPriority
+                nextPriority:=RMQmessage_queue_order{i}+1;
+        ENDFOR
+
+        !Add message to queue
+        FOR i FROM 1 TO Dim(RMQmessage_queue,1) DO
+            IF messageQueued=FALSE THEN
+                IF RMQmessage_queue_order{i}=0 THEN
+                    RMQGetMessage RMQmessage_queue{i};
+                    RMQmessage_queue_order{i}:=nextPriority;
+                    messageQueued:=TRUE;
+                ENDIF
+            ENDIF
+        ENDFOR
+
+        !If queue did not have space for the message, return message with error
+        IF messageQueued=FALSE THEN
+
+            !Recieve the message
+            RMQGetMessage message;
+            RMQGetMsgHeader message
+                \header:=header
+                \SenderId:=slot
+                \UserDef:=UserDef;
+
+            !Set the metadata to "Response"
+            UserDef:=get_rmqcode(rmq_inst_RESPONSE,get_rmqCode_id(UserDef));
+
+            !Return errInfo_RMQ_queue_full to sender
+            RMQSendMessage slot,errInfo_RMQ_queue_full\UserDef:=UserDef;
+            RMQAnnounceNewMessage;
+
+        ENDIF
+
+    ENDPROC
+
+
+    ! rmqCode_id_generate() Generates a new RMQ code id,
+    ! and tries to avoid collisions
+    LOCAL FUNC rmqCode_id rmqCode_id_generate()
+        IF rmqCode_id_LAST>rmqCode_id_MAX rmqCode_id_LAST:=rmqCode_id_MIN+(rmqCode_id_LAST-rmqCode_id_MAX);
+        rmqCode_id_LAST:=rmqCode_id_LAST+1;
+        IF rmqCode_id_LAST>rmqCode_id_MAX rmqCode_id_LAST:=rmqCode_id_MIN;
+        RETURN rmqCode_id_LAST;
+    ENDFUNC
+
+
+    !Returns the name of the RMQ queue of this task
+    FUNC rmqQueue rmqQueue_SELF()
+        RETURN "RMQ_"+GetTaskName();
+    ENDFUNC
+
+    !Creates an empty RMQ object that points to an RMQ location
+    FUNC dataPointer rmqObject(rmqQueue queue)
+        VAR dataPointer pointer;
+        pointer.rmqLocation:=queue;
+        RETURN pointer;
+    ENDFUNC
+
+    !announces the sending of a new message that can be fetched from a queue
+    LOCAL PROC RMQAnnounceNewMessage()
+        !increment RNL_rmqMessage_counter by +1, and loop to 1 if out of range
+        IF RNL_rmqMessage_counter>=8388607 THEN
+            SetGO RNL_rmqMessage_counter,1;
+        ELSE
+            SetGO RNL_rmqMessage_counter,RNL_rmqMessage_counter+1;
+        ENDIF
+    ENDPROC
+
+
+ENDMODULE

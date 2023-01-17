@@ -1,0 +1,87 @@
+MODULE RNL_B_RWLock(SYSMODULE)
+
+    !RWlock (Read Write Lock) is a lock designed to lock data 
+    !It allows multible asyncronous executions (Tasks, Interrupts) to read in paralell
+    !But requires single mastership for writing
+    
+    !TestAndSet???
+
+    !Dependencies: 
+    ! - None
+    ! - 
+
+    RECORD RWLock
+        string writeMaster;
+        num readQueue;
+    ENDRECORD
+
+    VAR errnum ERR_RWLOCK_LOCKED:=-1;
+
+    !Constructor
+    FUNC RWLock RWLock_NEW()
+        VAR RWLock lock;
+        RETURN lock;
+    ENDFUNC
+
+    !Reading lock state
+
+    FUNC bool RWLock_canWrite(RWLock lock)
+        RETURN lock.writeMaster="" AND lock.readQueue=0;
+    ENDFUNC
+
+    FUNC bool RWLock_canRead(RWLock lock)
+        RETURN lock.writeMaster="";
+    ENDFUNC
+
+    !Manipulating lock
+
+    PROC RWLock_beginWrite(INOUT RWLock lock)
+        IF NOT RWLock_canWrite(lock) THEN
+            IF ERR_RWLOCK_LOCKED=-1 BookErrNo ERR_RWLOCK_LOCKED;
+            RAISE ERR_RWLOCK_LOCKED;
+        ENDIF
+
+        lock.writeMaster:=GetTaskName();
+
+    ERROR
+        RAISE ;
+    ENDPROC
+
+    PROC RWLock_endWrite(INOUT RWLock lock)
+        lock.writeMaster:="";
+    ENDPROC
+
+    
+    PROC RWLock_beginRead(INOUT RWLock lock)
+        IF NOT RWLock_canRead(lock) THEN
+            IF ERR_RWLOCK_LOCKED=-1 BookErrNo ERR_RWLOCK_LOCKED;
+            RAISE ERR_RWLOCK_LOCKED;
+        ENDIF
+
+        incr lock.readQueue;
+
+    ERROR
+        RAISE ;
+    ENDPROC
+
+    PROC RWLock_endRead(INOUT RWLock lock)
+        Decr lock.readQueue;
+        IF lock.readQueue < 0 THEN
+            !ERROR
+            lock.readQueue := 0;
+        ENDIF
+    ENDPROC
+
+    !Wait functions
+
+    PROC RWLock_WaitAndBeginWrite(INOUT RWLock lock)
+        WaitUntil RWLock_canWrite(lock);
+        RWLock_beginWrite lock;
+    ENDPROC
+
+    PROC RWLock_WaitAndBeginRead(INOUT RWLock lock)
+        WaitUntil RWLock_canRead(lock);
+        RWLock_beginRead lock;
+    ENDPROC
+
+ENDMODULE

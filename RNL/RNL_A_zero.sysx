@@ -1,0 +1,13 @@
+MODULE RNL_A_zero(SYSMODULE)
+
+    !Move to zero for all joints.
+    PROC moveZero()
+        MoveAbsJ [[0,0,0,0,0,0],[9E9,9E9,9E9,9E9,9E9,9E9]]\NoEOffs,v200,fine,tool0;
+    ENDPROC
+
+    !Wrapper that will appear at the top of the procedure selection.
+    PROC AAA_moveZero()
+        moveZero;
+    ENDPROC
+
+ENDMODULE

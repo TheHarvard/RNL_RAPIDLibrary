@@ -1,0 +1,650 @@
+MODULE RNL__shape(SYSMODULE)
+
+    !This is the reference for all datatype/object modules. 
+    !To create a new datatype copy this module and ctrl+f replace
+    !"shape" With the new datatype, set the NULL value to a value
+    !that will never be in use, and adjust the list{X} size.
+
+
+    !Datatype: shape
+    !Module with standard methods for the datatype
+
+    !***************************************************************************
+    ! Data
+    !***************************************************************************
+
+    ALIAS string shape_type;
+
+    RECORD shape
+        shape_type type;
+        pose position;
+        pos boundingBox;
+        bool inverted;
+    ENDRECORD
+
+    !A constant that can be searched for to determine if a datatype module is loaded
+    PERS dataType dataType_shape:="shape";
+
+    ! 3D shapes
+    CONST shape_type SHAPE_SPHERE:="SPHERE";
+    CONST shape_type SHAPE_BOX:="BOX";
+    CONST shape_type SHAPE_AXIS_ALIGNED_BOX:="AXIS_ALIGNED_BOX";
+    CONST shape_type SHAPE_CYLINDER:="CYLINDER";
+    CONST shape_type SHAPE_AXIS_ALIGNED_CYLINDER:="AXIS_ALIGNED_CYLINDER";
+    CONST shape_type SHAPE_AXIS:="AXIS";
+    CONST shape_type SHAPE_PLANE:="PLANE";
+    CONST shape_type SHAPE_TRIANGULAR_PYRAMID:="TRIANGULAR_PYRAMID";
+    CONST shape_type SHAPE_SQUARE_PYRAMID:="SQUARE_PYRAMID";
+    CONST shape_type SHAPE_CONE:="CONE";
+    CONST shape_type SHAPE_TORUS:="TORUS";
+    CONST shape_type SHAPE_ELLIPSOID:="ELLIPSOID";
+    CONST shape_type SHAPE_CAPSULE:="CAPSULE";
+    CONST shape_type SHAPE_CYLINDER_SEGMENT:="CYLINDER_SEGMENT";
+    CONST shape_type SHAPE_SPHERE_SEGMENT:="SPHERE_SEGMENT";
+
+    ! 2D shapes
+    CONST shape_type SHAPE_CIRCLE:="CIRCLE";
+    CONST shape_type SHAPE_RECTANGLE:="RECTANGLE";
+    CONST shape_type SHAPE_AXIS_ALIGNED_RECTANGLE:="AXIS_ALIGNED_RECTANGLE";
+    CONST shape_type SHAPE_TRIANGLE:="TRIANGLE";
+    CONST shape_type SHAPE_ELLIPSE:="ELLIPSE";
+    CONST shape_type SHAPE_ARC:="ARC";
+    CONST shape_type SHAPE_SEGMENT:="SEGMENT";
+
+    ! 1D shapes
+    CONST shape_type SHAPE_LINE:="LINE";
+    CONST shape_type SHAPE_INTERVAL:="INTERVAL";
+    CONST shape_type SHAPE_LINE_SEGMENT:="LINE_SEGMENT";
+    CONST shape_type SHAPE_AXIS_ALIGNED_INTERVAL:="AXIS_ALIGNED_INTERVAL";
+
+    ! 0D shapes
+    CONST shape_type SHAPE_POINT:="POINT";
+
+    !Per module setting for whether the list should be used
+    !IF this bool is set to false then the NEW keyword will
+    !will create a stirng value datapointer for this datatype.
+    !If it is set to true, then the NEW keyword will use the pre declared list.
+    LOCAL CONST bool USE_DYNAMIC_DATA_ALLOCATION:=FALSE;
+
+    !INHERITS_FROM is the type that this type inherits from.
+    ! "" signifies no inheritance
+    LOCAL CONST dataType INHERITS_FROM:="";
+
+    !Null constants
+    CONST shape shape_NULL:=["NULL",[[0,0,0],[1,0,0,0]],[0,0,0],FALSE];
+    LOCAL CONST shape shape_DEFAULT:=["BOX",[[0,0,0],[1,0,0,0]],[0,0,0],FALSE];
+
+    !Pre declared list to be dynamically allocated
+    LOCAL VAR shape list{1};
+    !LOCAL VAR num list_lenght:=0;
+
+    !
+    VAR errnum ERR_BAD_SHAPE_TYPE:=-1;
+
+    !###########################################################################
+    ! NEW Constructor and ERASE Destructor
+    !###########################################################################
+
+    !NEW constructor with initial values
+    FUNC dataPointer NEW_shape(
+        \num exampleNumber1
+        \num exampleNumber2
+        \num exampleNumber3
+        )
+        VAR dataPointer pointer;
+        VAR shape data;
+
+        !Allocate and set data
+        NEW pointer;
+
+        !Set initial data 
+        data:=shape_get(pointer);
+
+        !IF Present(exampleNumber1) data.exampleNumber1:=exampleNumber1;
+        !IF Present(exampleNumber2) data.exampleNumber2:=exampleNumber2;
+        !IF Present(exampleNumber3) data.exampleNumber3:=exampleNumber3;
+
+        shape_set pointer,data;
+
+        !Return pointer
+        RETURN pointer;
+    ENDFUNC
+
+    !NEW constructor to allocate a data and return pointer
+    LOCAL PROC NEW(INOUT dataPointer pointer\dataPointer self)
+        VAR shape data;
+        VAR dataPointer self_;
+        VAR dataPointer inheritanceParent;
+        VAR dataPointer inheritanceParent_Pointer;
+
+        self_:=pointer;
+        IF Present(self) self_:=self;
+
+        data:=shape_DEFAULT;
+        !data.self:=self_;
+
+        IF USE_DYNAMIC_DATA_ALLOCATION=TRUE THEN
+
+            !Set the rmqLocation to this task
+            pointer.rmqLocation:=rmqQueue_SELF();
+
+            !Allocate a list position
+            pointer.type:=Type(list);
+            LIST_shape_append list,data\index:=pointer.id;
+
+            IF NOT INHERITS_FROM="" THEN
+                !Create nessesary inheritance chain
+                inheritanceParent:=NEW_(INHERITS_FROM);
+                inheritanceParent_Pointer:=NEW_("dataPointer");
+                dataPointer_set inheritanceParent_Pointer,inheritanceParent;
+                pointer.inheritanceParent_id:=inheritanceParent_Pointer.id;
+                pointer.inheritanceParent_name:=inheritanceParent_Pointer.name;
+            ENDIF
+
+        ELSE
+            !Create a string value datatype
+            pointer:=shape_(data);
+        ENDIF
+
+
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !Resolve an RMQ_execute command for this datatype. Return result
+    LOCAL PROC RMQ_execute(INOUT dataPointer pointer,VAR rmqmessage message)
+        VAR shape data;
+        RMQGetMsgData message,data;
+
+        !Add custom behavior for "executing" this datatype here
+        pointer:=dataPointer_NULL;
+
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !Allocate a data, set the data to recived RMQ message, and return pointer
+    LOCAL PROC RMQ_NEW(INOUT dataPointer pointer,VAR rmqmessage message)
+
+        VAR shape data;
+        RMQGetMsgData message,data;
+
+        IF USE_DYNAMIC_DATA_ALLOCATION=TRUE THEN
+            NEW pointer;
+            shape_set pointer,data;
+            RETURN ;
+        ENDIF
+
+        pointer:=shape_(data);
+
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !Send RMQ message of this datatype
+    LOCAL PROC RMQ_send(INOUT dataPointer data,dataPointer queue,dataPointer code)
+        VAR shape data_;
+        VAR string queue_;
+        VAR num code_;
+
+        VAR rmqslot slot;
+
+        data_:=shape_get(data);
+        queue_:=string_get(queue);
+        code_:=num_get(code);
+
+        RMQFindSlot slot,queue_;
+        RMQSendMessage slot,data_\UserDef:=code_;
+
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !Cleans up any datapointer
+    LOCAL PROC ERASE(INOUT dataPointer pointer)
+
+        VAR dataPointer inheritanceParent;
+
+        !Call ERASE on the object that this object inherits from
+        IF pointer.inheritanceParent_name<>""
+            OR pointer.inheritanceParent_id>0 THEN
+            inheritanceParent.id:=pointer.inheritanceParent_id;
+            inheritanceParent.name:=pointer.inheritanceParent_name;
+
+            ERASE_ inheritanceParent;
+        ENDIF
+
+        !ERASE
+        IF dataPointer_isReference(pointer) shape_set pointer,shape_NULL;
+        IF dataPointer_isIndex(pointer) LIST_shape_del list\keepIndexes,pointer.id;
+        pointer:=dataPointer_NULL;
+
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+
+    !Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤
+    ! WRAPPER Methods
+    !Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤Â¤
+
+    !===========================================================================
+    ! Public Data/Object Methods
+    !===========================================================================
+
+    !---------------------------------------------------------------------------
+    ! Auxiliary Methods
+    !---------------------------------------------------------------------------
+
+    PROC worldZone_from_shape(VAR shapedata worldZone,shape shape_)
+        IF shape_.type=SHAPE_BOX THEN
+            IF shape_.inverted THEN
+                WZBoxDef\Outside,worldZone,shape_.position.trans,shape_.boundingBox;
+            ELSE
+                WZBoxDef\Inside,worldZone,shape_.position.trans,shape_.boundingBox;
+            ENDIF
+        ELSEIF shape_.type=SHAPE_SPHERE THEN
+            IF shape_.inverted THEN
+                WZSphDef\Outside,worldZone,shape_.position.trans,Distance(shape_.position.trans,shape_.boundingBox);
+            ELSE
+                WZSphDef\Inside,worldZone,shape_.position.trans,Distance(shape_.position.trans,shape_.boundingBox);
+            ENDIF
+            !        ELSEIF shape_.type = SHAPE_CYLINDER THEN
+            !            IF shape_.inverted THEN
+            !            WZCylDef\Outside,worldZone,shape_.position.trans,<ARG>,<ARG>;
+            !            ELSE
+            !            WZCylDef\Inside,worldZone,shape_.position.trans,<ARG>,<ARG>;
+            !            ENDIF
+        ELSE
+            !ERROR
+            errno_bookAndRaise ERR_BAD_SHAPE_TYPE;
+        ENDIF
+    ENDPROC
+
+    !///////////////////////////////////////////////////////////////////////////
+    ! Privat Data/Object Methods
+    !///////////////////////////////////////////////////////////////////////////
+
+    !+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+    ! Event Responses
+    !+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+    !$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+    ! States
+    !$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+    !&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+    ! Getter and Setter Methods
+    !&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+
+    !    !&&& Get Self &&&
+    !    LOCAL PROC getSelf(dataPointer pointer,INOUT datapointer self)
+    !        VAR shape object;
+    !        object := shape_get(pointer);
+    !        self := object.self;
+    !    ENDPROC
+
+    !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    ! Standardized Methods
+    !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    !%%%% Initialize the list %%%%
+
+    !Initialize the list
+    LOCAL PROC config()
+        LIST_shape_clear list;
+    ENDPROC
+
+    !%%%% Direct Access to list %%%%
+
+    !Allow acces to list
+    FUNC shape shape_list(num i)
+        RETURN list{i};
+    ENDFUNC
+
+    !Allow access to list lenght
+    FUNC num shape_lenght()
+        !RETURN list_lenght;
+        RETURN LIST_shape_lenght(list);
+    ENDFUNC
+
+    !%%%% Event Handler %%%%
+
+    !event_handler is the default target for events subscribed to this object
+    LOCAL PROC event_handler(dataPointer pointer,dataPointer eventNote)
+        !Add default event handeling here
+    ENDPROC
+
+    !%%%% DataPointer methods %%%%
+
+    !Set a datapointers value
+    PROC shape_set(INOUT dataPointer pointer,shape value)
+        IF dataPointer_isReference(pointer) SetDataVal pointer.name,value;
+        IF dataPointer_isReference(pointer) RETURN ;
+        IF dataPointer_isValue(pointer) pointer.value:=ValToStr(value);
+        IF dataPointer_isValue(pointer) RETURN ;
+        IF dataPointer_isIndex(pointer) list{pointer.id}:=value;
+        IF dataPointer_isIndex(pointer) RETURN ;
+        !If the pointer is none of the above, create a new pointer with string val
+        IF NOT USE_DYNAMIC_DATA_ALLOCATION pointer:=shape_(value);
+        IF NOT USE_DYNAMIC_DATA_ALLOCATION RETURN ;
+        !ERROR
+        !Data Pointer Not set up
+        errno_bookAndRaise ERR_BAD_DATA_POINTER;
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !Get a datapointers value
+    FUNC shape shape_get(dataPointer pointer)
+        VAR shape returnValue;
+        returnValue:=shape_NULL;
+        IF dataPointer_isReference(pointer) GetDataVal pointer.name,returnValue;
+        IF dataPointer_isValue(pointer) errFromBool StrToVal(pointer.value,returnValue),ERR_SYM_ACCESS;
+        IF dataPointer_isIndex(pointer) returnValue:=list{pointer.id};
+        RETURN returnValue;
+    ERROR
+        !RAISE ;
+    ENDFUNC
+
+    !Method for to create a value-datapointer from a value, or that points to a value
+    FUNC dataPointer shape_(shape value\switch asReference)
+        VAR dataPointer pointer;
+        pointer.type:=Type(value);
+        IF Present(asReference) pointer.name:=ArgName(value);
+        IF NOT Present(asReference) pointer.value:=ValToStr(value);
+        RETURN pointer;
+    ERROR
+        !RAISE ;
+    ENDFUNC
+
+    ! %%%% LIST methods %%%%
+
+    !Initialize new list
+    PROC LIST_shape_clear(
+        INOUT shape list{*}
+        \INOUT num lenght)
+
+        FOR i FROM 1 TO Dim(list,1) DO
+            list{i}:=shape_NULL;
+        ENDFOR
+
+        IF Present(lenght) lenght:=0;
+
+    ENDPROC
+
+    !Append a datapointer to the list
+    !The optional argument index will be set to the index that was used
+    PROC LIST_shape_append(
+        INOUT shape list{*}
+        \INOUT num lenght,
+        shape item
+        \INOUT num index)
+
+        !Reject null input
+        IF item=shape_NULL errno_bookAndRaise(ERR_UNEXPECTED_NULL);
+
+        IF NOT Present(lenght) THEN
+            FOR i FROM 1 TO Dim(list,1) DO
+                IF list{i}=shape_NULL THEN
+                    list{i}:=item;
+                    IF Present(index) index:=i;
+                    RETURN ;
+                ENDIF
+            ENDFOR
+            RETURN ;
+        ENDIF
+
+        lenght:=lenght+1;
+        list{lenght}:=item;
+        IF Present(index) index:=lenght;
+
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !Pop the last data pointer in the list
+    !Or if index is specified, pops the index
+    FUNC shape LIST_shape_pop(
+        INOUT shape list{*}
+        \INOUT num lenght,
+        \num index)
+
+        VAR shape item;
+
+        !Reject indexes ouside of lenght
+        IF Present(lenght) AND Present(index) THEN
+            IF index>lenght errno_bookAndRaise(ERR_LIST_OUT_OF_RANGE);
+        ENDIF
+
+        !Pop at spesific index
+        IF Present(index) THEN
+            item:=list{index};
+            list{index}:=shape_NULL;
+            LIST_shape_del list\lenght?lenght\keepIndexes,index;
+            RETURN item;
+        ENDIF
+
+        !Pop at last index, without lenght
+        IF NOT Present(lenght) THEN
+            FOR i FROM Dim(list,1) TO 1 DO
+                IF list{i}<>shape_NULL THEN
+                    item:=list{i};
+                    list{i}:=shape_NULL;
+                    RETURN item;
+                ENDIF
+            ENDFOR
+        ENDIF
+
+        !Pop at last index, with lenght
+        item:=list{lenght};
+        list{lenght}:=shape_NULL;
+        lenght:=lenght-1;
+        RETURN item;
+
+    ERROR
+        !RAISE ;
+    ENDFUNC
+
+    !Delete an item at a position of the list
+    PROC LIST_shape_del(
+        INOUT shape list{*}
+        \INOUT num lenght
+        \switch keepIndexes,
+        num index)
+
+        !Reject indexes ouside of lenght
+        IF Present(lenght) AND Present(index) THEN
+            IF index>lenght errno_bookAndRaise(ERR_LIST_OUT_OF_RANGE);
+        ENDIF
+
+        !Delet data
+        list{index}:=shape_NULL;
+
+        !If indexes should be keept, then don't shift any data around
+        IF Present(keepIndexes) RETURN ;
+
+        !Shift down the above items to close gap, without lenght
+        IF NOT Present(lenght) THEN
+            FOR i FROM index TO Dim(list,1)-1 DO
+                list{index}:=list{index+1};
+            ENDFOR
+            list{Dim(list,1)}:=shape_NULL;
+            RETURN ;
+        ENDIF
+
+        !Shift down the above items to close gap, with lenght
+        FOR i FROM index TO lenght-1 DO
+            list{index}:=list{index+1};
+        ENDFOR
+        list{lenght}:=shape_NULL;
+        lenght:=lenght-1;
+
+    ERROR
+        IF ERRNO=ERR_LIST_OUT_OF_RANGE RAISE ERR_LIST_OUT_OF_RANGE;
+        !RAISE ;
+    ENDPROC
+
+    !Returns the number of items actively used in the list (not null)
+    FUNC num LIST_shape_lenght(INOUT shape list{*})
+        VAR num lenght;
+        lenght:=0;
+
+        FOR i FROM 1 TO Dim(list,1) DO
+            IF list{i}<>shape_NULL THEN
+                lenght:=lenght+1;
+            ENDIF
+        ENDFOR
+
+        RETURN lenght;
+    ERROR
+        !RAISE ;
+    ENDFUNC
+
+    !xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    ! Examples
+    !xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+    !Returns the volume of a shape
+    FUNC num shape_volume(shape s\switch returnZeroForInvalidShape)
+        TEST s.type
+        CASE SHAPE_SPHERE:
+            RETURN 4/3*pi*Pow(s.boundingBox.x*0.5,3);
+        CASE SHAPE_AXIS_ALIGNED_BOX,SHAPE_BOX:
+            RETURN s.boundingBox.x*s.boundingBox.y*s.boundingBox.z;
+            !CASE SHAPE_AXIS_ALIGNED_CYLINDER, SHAPE_CYLINDER:
+
+        DEFAULT:
+            !Shape not supported
+            IF Present(returnZeroForInvalidShape) RETURN 0;
+            BookErrNo ERR_BAD_SHAPE_TYPE;
+            RAISE ERR_BAD_SHAPE_TYPE;
+        ENDTEST
+    ENDFUNC
+
+    !Returns the area of a shape
+    FUNC num shape_area(shape s\switch returnZeroForInvalidShape)
+        TEST s.type
+        CASE SHAPE_SPHERE:
+            RETURN 4*pi*Pow(s.boundingBox.x*0.5,2);
+        CASE SHAPE_AXIS_ALIGNED_BOX,SHAPE_BOX:
+            RETURN 2*(s.boundingBox.x+s.boundingBox.y+s.boundingBox.z);
+            !CASE SHAPE_AXIS_ALIGNED_CYLINDER, SHAPE_CYLINDER:
+            !RETURN 2*pi*(s.boundingBox.x+s.boundingBox.y+s.boundingBox.z);
+        DEFAULT:
+            !Shape not supported
+            IF Present(returnZeroForInvalidShape) RETURN 0;
+            BookErrNo ERR_BAD_SHAPE_TYPE;
+            RAISE ERR_BAD_SHAPE_TYPE;
+        ENDTEST
+    ENDFUNC
+
+    !Returns true if two shapes intersects
+    FUNC bool shape_intersect(shape a,shape b)
+        TEST a.type
+        CASE SHAPE_POINT:
+            ! SHAPE_POINT
+            TEST b.type
+
+            CASE SHAPE_POINT:
+                ! SHAPE_POINT | SHAPE_POINT
+                RETURN a=b;
+
+            CASE SHAPE_AXIS_ALIGNED_BOX:
+                ! SHAPE_POINT | SHAPE_AXIS_ALIGNED_BOX
+                RETURN a.position.trans.x>=b.position.trans.x
+                    AND a.position.trans.x<=b.position.trans.x+b.boundingBox.x
+                    AND a.position.trans.y>=b.position.trans.y
+                    AND a.position.trans.y<=b.position.trans.y+b.boundingBox.y
+                    AND a.position.trans.z>=b.position.trans.z
+                    AND a.position.trans.z<=b.position.trans.z+b.boundingBox.z;
+
+            CASE SHAPE_AXIS_ALIGNED_CYLINDER:
+                ! SHAPE_POINT | SHAPE_AXIS_ALIGNED_CYLINDER
+                RETURN VectMagn([a.position.trans.x,a.position.trans.y,0])<=b.boundingBox.x*0.5
+                    AND a.position.trans.z>=b.position.trans.z
+                    AND a.position.trans.z<=b.position.trans.z+b.boundingBox.z;
+
+            DEFAULT:
+                !Shape combination not supported
+                BookErrNo ERR_BAD_SHAPE_TYPE;
+                RAISE ERR_BAD_SHAPE_TYPE;
+            ENDTEST
+
+        CASE SHAPE_AXIS_ALIGNED_BOX:
+            ! SHAPE_AXIS_ALIGNED_BOX
+            TEST b.type
+
+            CASE SHAPE_POINT:
+                ! SHAPE_AXIS_ALIGNED_BOX | SHAPE_POINT
+                RETURN shape_intersect(b,a);
+
+            CASE SHAPE_AXIS_ALIGNED_BOX:
+                ! SHAPE_AXIS_ALIGNED_BOX | SHAPE_AXIS_ALIGNED_BOX
+                !https://stackoverflow.com/questions/20925818/algorithm-to-check-if-two-boxes-overlap
+                RETURN (a.position.trans.x+a.boundingBox.x>=b.position.trans.x AND b.position.trans.x+b.boundingBox.x>=a.position.trans.x)
+                AND (a.position.trans.y+a.boundingBox.y>=b.position.trans.y AND b.position.trans.x+b.boundingBox.y>=a.position.trans.y)
+                AND (a.position.trans.z+a.boundingBox.z>=b.position.trans.x AND b.position.trans.z+b.boundingBox.z>=a.position.trans.z);
+
+                !CASE SHAPE_AXIS_ALIGNED_CYLINDER:
+                ! SHAPE_AXIS_ALIGNED_BOX | SHAPE_AXIS_ALIGNED_CYLINDER
+
+            DEFAULT:
+                !Shape combination not supported
+                BookErrNo ERR_BAD_SHAPE_TYPE;
+                RAISE ERR_BAD_SHAPE_TYPE;
+            ENDTEST
+
+        CASE SHAPE_AXIS_ALIGNED_CYLINDER:
+            ! SHAPE_AXIS_ALIGNED_CYLINDER
+            TEST b.type
+
+            CASE SHAPE_POINT:
+                ! SHAPE_AXIS_ALIGNED_CYLINDER | SHAPE_POINT
+                RETURN shape_intersect(b,a);
+
+            DEFAULT:
+                !Shape combination not supported
+                BookErrNo ERR_BAD_SHAPE_TYPE;
+                RAISE ERR_BAD_SHAPE_TYPE;
+            ENDTEST
+
+        DEFAULT:
+            !Shape not supported
+            BookErrNo ERR_BAD_SHAPE_TYPE;
+            RAISE ERR_BAD_SHAPE_TYPE;
+        ENDTEST
+
+    ERROR
+        IF ERRNO=ERR_BAD_SHAPE_TYPE RAISE ;
+    ENDFUNC
+
+    !Returns true if shape a fully contains shape b
+    FUNC bool shape_contains(shape a,shape b)
+        TEST a.type
+        CASE <EXP>:
+        DEFAULT:
+            !Shape not supported
+            BookErrNo ERR_BAD_SHAPE_TYPE;
+            RAISE ERR_BAD_SHAPE_TYPE;
+        ENDTEST
+    ENDFUNC
+
+    !Calculates the axis aligned box that covers the shape
+    FUNC shape shape_getAxisAlignedBox(shape s\switch returnZeroForInvalidShape)
+        <SMT>
+    ENDFUNC
+
+
+    
+    
+    
+    !=========
+    ! Constructors
+    
+    FUNC shape new_shape_AXIS_ALIGNED_CYLINDER(pos BaseCenterPoint, num radi, num height)
+        <SMT>
+    ENDFUNC
+    
+
+ENDMODULE

@@ -1,0 +1,747 @@
+MODULE RNL__baseObject(SYSMODULE)
+
+    ! baseObject is a basic object that implements the following fundamental features:
+    ! - Name - For making loggs more readable
+    ! - Semaphore (RWlock) - To allow asyncronous execution (multitask shared data)
+    ! - Parent - For making hierarchical structres of objects
+    ! - Execution Mode - For simplifying debugging and virtual integration
+    ! - Position - For representing the location of the object
+    ! 
+    ! Most other non-abstract objects should inherit from baseObject
+
+    !Datatype: baseObject
+    !Module with standard methods for the datatype
+
+    !***************************************************************************
+    ! Data
+    !***************************************************************************
+
+    RECORD baseObject
+
+        string name;
+
+        dataPointer self;
+        RWLock lock;
+
+        dataPointer parent;
+        executionMode exeMode;
+        wobjdata position;
+
+        dataPointer subParent_ERASED;
+        dataPointer subParent_POSITION_CHANGED;
+
+    ENDRECORD
+
+    !Events
+    !PERS event CREATED;
+    PERS event ERASED;
+    PERS event EXEMODE_CHANGED;
+    PERS event NAME_CHANGED;
+    PERS event POSITION_CHANGED;
+    PERS event PARENT_CHANGED;
+    !PERS event CHILD_CONNECTED;
+    !PERS event CHILD_DISCONNECTED;
+
+    !Error numbers
+    VAR errnum ERR_OVERWRITTEN_BY_PARENT:=-1;
+
+    !A constant that can be searched for to determine if a datatype module is loaded
+    PERS dataType dataType_baseObject:="baseObject";
+
+    !Per module setting for whether the list should be used
+    !IF this bool is set to false then the NEW keyword will
+    !will create a stirng value datapointer for this datatype.
+    !If it is set to true, then the NEW keyword will use the pre declared list.
+    LOCAL CONST bool USE_DYNAMIC_DATA_ALLOCATION:=TRUE;
+
+    !INHERITS_FROM is the type that this type inherits from.
+    ! empty string ("") signifies no inheritance
+    LOCAL CONST dataType INHERITS_FROM:="";
+
+    !Null constants
+    CONST baseObject baseObject_NULL:=["",["","",0,"","",0,""],["",0],["","",0,"","",0,""],[FALSE,FALSE,FALSE,FALSE,FALSE],[FALSE,TRUE,"",[[0,0,0],[1,0,0,0]],[[0,0,0],[1,0,0,0]]],["","",0,"","",0,""],["","",0,"","",0,""]];
+    LOCAL CONST baseObject baseObject_DEFAULT:=["Unnamed",["","",0,"","",0,""],["",0],["","",0,"","",0,""],[FALSE,FALSE,FALSE,FALSE,FALSE],[FALSE,TRUE,"",[[0,0,0],[1,0,0,0]],[[0,0,0],[1,0,0,0]]],["","",0,"","",0,""],["","",0,"","",0,""]];
+
+    !Pre delcared list to be dynamically allocated
+    LOCAL VAR baseObject list{300};
+    !LOCAL VAR num list_lenght:=0;
+
+    !Constants:
+    CONST num PRIORITY_PARENTAL_EVENTS:=10000;
+
+    !###########################################################################
+    ! NEW Constructor and ERASE Destructor
+    !###########################################################################
+
+    !NEW constructor with initial values
+    FUNC dataPointer NEW_baseObject(
+        \string name
+        \dataPointer parent
+        \executionMode exeMode
+        \wobjdata position
+        \pose pose_position
+        \switch robhold
+        \string ufmec
+        )
+        VAR dataPointer pointer;
+        VAR baseObject data;
+
+        VAR wobjdata wobjPosition;
+
+        !Allocate and set data
+        NEW pointer;
+
+        !Set initial data 
+        data:=baseObject_get(pointer);
+
+        baseObject_set pointer,data;
+
+        IF Present(name) setName_ pointer,name;
+        IF Present(parent) setParent_ pointer,parent;
+        IF Present(exeMode) setExeMode_ pointer,exeMode;
+
+        wobjPosition:=getPosition_(pointer);
+        IF Present(position) wobjPosition:=position;
+        IF Present(pose_position) wobjPosition:=position;
+        IF Present(robhold) data.position.robhold:=TRUE;
+        IF Present(ufmec) wobjPosition.ufprog:=FALSE;
+        IF Present(ufmec) wobjPosition.ufmec:=ufmec;
+        setPosition_ pointer\position_wobj:=position;
+
+        !Return pointer
+        RETURN pointer;
+    ENDFUNC
+
+    !NEW constructor to allocate a data and return pointer
+    LOCAL PROC NEW(INOUT dataPointer pointer\dataPointer self)
+        VAR baseObject data;
+        VAR dataPointer self_;
+        VAR dataPointer inheritanceParent;
+        VAR dataPointer inheritanceParent_Pointer;
+
+        self_:=pointer;
+        IF Present(self) self_:=self;
+
+        data:=baseObject_DEFAULT;
+        data.self:=self_;
+
+        IF USE_DYNAMIC_DATA_ALLOCATION=TRUE THEN
+
+            !Set the rmqLocation to this task
+            pointer.rmqLocation:=rmqQueue_SELF();
+
+            !Allocate a list position
+            pointer.type:=Type(list);
+            LIST_baseObject_append list,data\index:=pointer.id;
+
+            IF NOT INHERITS_FROM="" THEN
+                !Create nessesary inheritance chain
+                inheritanceParent:=NEW_(INHERITS_FROM);
+                inheritanceParent_Pointer:=NEW_("dataPointer");
+                dataPointer_set inheritanceParent_Pointer,inheritanceParent;
+                pointer.inheritanceParent_id:=inheritanceParent_Pointer.id;
+                pointer.inheritanceParent_name:=inheritanceParent_Pointer.name;
+            ENDIF
+
+        ELSE
+            !Create a string value datatype
+            pointer:=baseObject_(data);
+        ENDIF
+
+
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !Resolve an RMQ_execute command for this datatype. Return result
+    LOCAL PROC RMQ_execute(INOUT dataPointer pointer,VAR rmqmessage message)
+        VAR baseObject data;
+        RMQGetMsgData message,data;
+
+        !Add custom behavior for "executing" this datatype here
+        pointer:=dataPointer_NULL;
+
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !Allocate a data, set the data to recived RMQ message, and return pointer
+    LOCAL PROC RMQ_NEW(INOUT dataPointer pointer,VAR rmqmessage message)
+
+        VAR baseObject data;
+        RMQGetMsgData message,data;
+
+        IF USE_DYNAMIC_DATA_ALLOCATION=TRUE THEN
+            NEW pointer;
+            baseObject_set pointer,data;
+            RETURN ;
+        ENDIF
+
+        pointer:=baseObject_(data);
+
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !Send RMQ message of this datatype
+    LOCAL PROC RMQ_send(INOUT dataPointer data,dataPointer queue,dataPointer code)
+        VAR baseObject data_;
+        VAR string queue_;
+        VAR num code_;
+
+        VAR rmqslot slot;
+
+        data_:=baseObject_get(data);
+        queue_:=string_get(queue);
+        code_:=num_get(code);
+
+        RMQFindSlot slot,queue_;
+        RMQSendMessage slot,data_\UserDef:=code_;
+
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !Cleans up any datapointer
+    LOCAL PROC ERASE(INOUT dataPointer pointer)
+
+        VAR dataPointer inheritanceParent;
+        VAR baseObject object;
+
+        object:=baseObject_get(pointer);
+
+        !Call ERASE on the object that this object inherits from
+        IF pointer.inheritanceParent_name<>""
+            OR pointer.inheritanceParent_id>0 THEN
+            inheritanceParent.id:=pointer.inheritanceParent_id;
+            inheritanceParent.name:=pointer.inheritanceParent_name;
+
+            ERASE_ inheritanceParent;
+        ENDIF
+
+        !ERASE event subscriptions
+        ERASE_ object.subParent_ERASED;
+        ERASE_ object.subParent_POSITION_CHANGED;
+
+        !ERASE the object
+        IF dataPointer_isReference(pointer) baseObject_set pointer,baseObject_NULL;
+        IF dataPointer_isIndex(pointer) LIST_baseObject_del list\keepIndexes,pointer.id;
+        pointer:=dataPointer_NULL;
+
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+
+    !¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤
+    ! WRAPPER Methods
+    !¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤
+
+    !¤¤¤ Get Self ¤¤¤
+    FUNC datapointer self_(dataPointer pointer)
+        VAR dataPointer self;
+        try\obj:=pointer,"getSelf"\arg1_INOUT:=self\trowError;
+        RETURN self;
+    ENDFUNC
+
+    ! ¤¤¤ Name ¤¤¤
+    FUNC string getName_(dataPointer pointer)
+        VAR dataPointer name;
+        try\obj:=pointer,"getName"\arg1_INOUT:=name\trowError;
+        RETURN string_get(name);
+    ENDFUNC
+
+    PROC setName_(dataPointer pointer,string name)
+        try\obj:=pointer,"setName"\arg1:=string_(name)\trowError;
+    ENDPROC
+
+    ! ¤¤¤ Parent ¤¤¤
+    FUNC dataPointer getParent_(dataPointer pointer)
+        VAR dataPointer parent;
+        try\obj:=pointer,"getParent"\arg1_INOUT:=parent\trowError;
+        RETURN parent;
+    ENDFUNC
+
+    PROC setParent_(dataPointer pointer,dataPointer parent)
+        try\obj:=pointer,"setParent"\arg1_INOUT:=parent\trowError;
+    ENDPROC
+
+    ! ¤¤¤ ExeMode ¤¤¤
+    FUNC executionMode getExeMode_(dataPointer pointer)
+        VAR dataPointer exeMode;
+        try\obj:=pointer,"getExeMode"\arg1_INOUT:=exeMode\trowError;
+        RETURN executionMode_get(exeMode);
+    ENDFUNC
+
+    PROC setExeMode_(dataPointer pointer,executionMode exeMode)
+        try\obj:=pointer,"setExeMode"\arg1:=executionMode_(exeMode)\trowError;
+    ENDPROC
+
+    ! ¤¤¤ Position ¤¤¤
+
+    PROC offsetPosition_(dataPointer pointer,
+        \wobjdata position_wobj
+        |pose position_pose
+        |pos position_pos
+        |orient position_orient)
+
+        IF Present(position_wobj) try\obj:=pointer,"offsetPosition"\arg1:=wobjdata_(position_wobj)\trowError;
+        IF Present(position_pose) try\obj:=pointer,"offsetPosition"\arg1:=pose_(position_pose)\trowError;
+        IF Present(position_pos) try\obj:=pointer,"offsetPosition"\arg1:=pos_(position_pos)\trowError;
+        IF Present(position_orient) try\obj:=pointer,"offsetPosition"\arg1:=orient_(position_orient)\trowError;
+    ENDPROC
+
+    FUNC wobjdata getPosition_(dataPointer pointer)
+        VAR dataPointer position;
+        try\obj:=pointer,"getPosition"\arg1_INOUT:=position\trowError;
+        RETURN wobjdata_get(position);
+    ENDFUNC
+
+    PROC setPosition_(dataPointer pointer,
+        \wobjdata position_wobj
+        |pose position_pose
+        |pos position_pos
+        |orient position_orient)
+
+        IF Present(position_wobj) try\obj:=pointer,"setPosition"\arg1:=wobjdata_(position_wobj)\trowError;
+        IF Present(position_pose) try\obj:=pointer,"setPosition"\arg1:=pose_(position_pose)\trowError;
+        IF Present(position_pos) try\obj:=pointer,"setPosition"\arg1:=pos_(position_pos)\trowError;
+        IF Present(position_orient) try\obj:=pointer,"setPosition"\arg1:=orient_(position_orient)\trowError;
+    ENDPROC
+
+    !¤¤¤ Get Self ¤¤¤
+    FUNC dataPointer getSelf_(dataPointer pointer)
+        VAR dataPointer self;
+        try\obj:=pointer,"getSelf"\arg1_INOUT:=self\trowError;
+        RETURN self;
+    ENDFUNC
+
+
+
+    !===========================================================================
+    ! Public Data/Object Methods
+    !===========================================================================
+
+    !---------------------------------------------------------------------------
+    ! Auxiliary Methods
+    !---------------------------------------------------------------------------
+
+    !Reconfigured setParent method to more intuitively set a child
+    PROC addChild(dataPointer parent,dataPointer child)
+        setParent_ child,parent;
+    ENDPROC
+
+    !///////////////////////////////////////////////////////////////////////////
+    ! Privat Data/Object Methods
+    !///////////////////////////////////////////////////////////////////////////
+
+    !Adjusts the uframe of a wobj to be the parents position
+    LOCAL PROC updateParentalPositionOffset(dataPointer parent,wobjdata position)
+
+        VAR wobjdata wobjParent;
+
+        !If parent is set,
+        !Set parents data to uframe, and wobj config data
+        IF parent<>dataPointer_NULL THEN
+            wobjParent:=getPosition_(parent);
+            position.robhold:=wobjParent.robhold;
+            position.ufprog:=wobjParent.ufprog;
+            position.ufmec:=wobjParent.ufmec;
+            position.uframe:=PoseMult(wobjParent.uframe,wobjParent.oframe);
+        ELSE
+            !Set uframe to zero, when no parent is set
+            position.uframe:=[[0,0,0],[1,0,0,0]];
+        ENDIF
+
+    ENDPROC
+
+    !+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+    ! Event Responses
+    !+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+    !+++ Event Handler +++
+    !event_handler is the default target for events subscriptions to this object
+    LOCAL PROC event_handler(dataPointer pointer,dataPointer eventNote)
+        !Add default event handeling here
+    ENDPROC
+
+    ! +++ ERASE self in response to parent erasing +++
+    LOCAL PROC onParent_ERASED(dataPointer pointer,eventInfo eInfo)
+        VAR baseObject object;
+        object:=baseObject_get(pointer);
+        ERASE_ object.self;
+    ENDPROC
+
+    ! +++ update position in response to parent changing their position +++
+    LOCAL PROC onParent_POSITION_CHANGED(dataPointer pointer,eventInfo eInfo)
+        VAR baseObject object;
+        object:=baseObject_get(pointer);
+        updateParentalPositionOffset object.parent,object.position;
+    ENDPROC
+
+    !$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+    ! States
+    !$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+    !&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+    ! Getter and Setter Methods
+    !&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+
+    ! &&& Name &&&
+    LOCAL PROC getName(dataPointer pointer,INOUT dataPointer name)
+        VAR baseObject object;
+        object:=baseObject_get(pointer);
+        name:=string_(object.name);
+    ENDPROC
+
+    LOCAL PROC setName(dataPointer pointer,dataPointer name)
+        VAR baseObject object;
+        object:=baseObject_get(pointer);
+        object.name:=string_get(name);
+        baseObject_set pointer,object;
+
+        !Notify subscribers of the change
+        TRIGGER\object:=object.self,NAME_CHANGED\data:=string_(object.name);
+    ENDPROC
+
+    ! &&& Parent &&&
+    LOCAL PROC getParent(dataPointer pointer,INOUT dataPointer parent)
+        VAR baseObject object;
+        object:=baseObject_get(pointer);
+        parent:=object.Parent;
+    ENDPROC
+
+    LOCAL PROC setParent(dataPointer pointer,dataPointer parent)
+        VAR baseObject object;
+        object:=baseObject_get(pointer);
+
+        !Set the parent
+        object.parent:=parent;
+
+        !Update the position from the parent
+        updateParentalPositionOffset object.parent,object.position;
+
+        !Setup new event subscriptions to parents events
+        ERASE_ object.subParent_ERASED;
+        IF object.parent<>dataPointer_NULL
+            object.subParent_ERASED:=NEW_subscription(
+                \priority:=PRIORITY_PARENTAL_EVENTS
+                \triggerObject:=object.parent
+                \triggerEvent:=ERASED
+                \reciverObject:=object.self
+                \reciverProcName:="onParent_ERASED");
+
+        ERASE_ object.subParent_POSITION_CHANGED;
+        IF object.parent<>dataPointer_NULL
+            object.subParent_ERASED:=NEW_subscription(
+                \priority:=PRIORITY_PARENTAL_EVENTS
+                \triggerObject:=object.parent
+                \triggerEvent:=POSITION_CHANGED
+                \reciverObject:=object.self
+                \reciverProcName:="onParent_POSITION_CHANGED");
+
+        !Set the data
+        baseObject_set pointer,object;
+
+        !Notify subscribers of the change in parent
+        TRIGGER\object:=object.self,PARENT_CHANGED\data:=object.parent;
+
+        !Notify subscribers of the change in position (from parent)
+        TRIGGER\object:=object.self,POSITION_CHANGED\data:=object.parent;
+    ENDPROC
+
+    ! &&& ExeMode &&&
+    LOCAL PROC getExeMode(dataPointer pointer,INOUT dataPointer exeMode)
+        VAR baseObject object;
+        object:=baseObject_get(pointer);
+        exeMode:=executionMode_(object.exeMode);
+    ENDPROC
+
+    LOCAL PROC setExeMode(dataPointer pointer,dataPointer exeMode)
+        VAR baseObject object;
+        object:=baseObject_get(pointer);
+        object.exeMode:=executionMode_get(exeMode);
+        baseObject_set pointer,object;
+
+        !Notify subscribers of the change
+        TRIGGER\object:=object.self,EXEMODE_CHANGED\data:=exeMode;
+    ENDPROC
+
+    ! &&& Position &&&
+    LOCAL PROC offsetPosition(dataPointer pointer,dataPointer offset)
+        VAR baseObject object;
+        VAR wobjdata wobjParent;
+        VAR pose offset_:=[[0,0,0],[1,0,0,0]];
+        object:=baseObject_get(pointer);
+
+        !build offset
+        IF offset.type=Type(wobj0.oframe) THEN
+            offset_:=pose_get(offset);
+        ELSEIF offset.type=Type(wobj0.oframe.trans) THEN
+            offset_.trans:=pos_get(offset);
+        ELSEIF offset.type=Type(wobj0.oframe.rot) THEN
+            offset_.rot:=orient_get(offset);
+        ENDIF
+
+        !offset data to oframe
+        object.position.oframe:=PoseMult(object.position.oframe,offset_);
+
+        !Update the position from the parent
+        updateParentalPositionOffset object.parent,object.position;
+
+        baseObject_set pointer,object;
+
+        !Notify subscribers of the change
+        TRIGGER\object:=object.self,POSITION_CHANGED\data:=wobjdata_(object.position);
+    ENDPROC
+
+    LOCAL PROC getPosition(dataPointer pointer,INOUT dataPointer position)
+        VAR baseObject object;
+        object:=baseObject_get(pointer);
+        position:=wobjdata_(object.position);
+    ENDPROC
+
+    LOCAL PROC setPosition(dataPointer pointer,dataPointer position)
+        VAR baseObject object;
+        VAR wobjdata wobjParent;
+        object:=baseObject_get(pointer);
+
+        !Set data to oframe
+        IF position.type=Type(wobj0) THEN
+            object.position:=wobjdata_get(position);
+
+        ELSEIF position.type=Type(wobj0.oframe) THEN
+            object.position.oframe:=pose_get(position);
+
+        ELSEIF position.type=Type(wobj0.oframe.trans) THEN
+            object.position.oframe.trans:=pos_get(position);
+
+        ELSEIF position.type=Type(wobj0.oframe.rot) THEN
+            object.position.oframe.rot:=orient_get(position);
+
+        ENDIF
+
+        !Update the position from the parent
+        updateParentalPositionOffset object.parent,object.position;
+
+        baseObject_set pointer,object;
+
+        !Notify subscribers of the change
+        TRIGGER\object:=object.self,POSITION_CHANGED\data:=wobjdata_(object.position);
+    ENDPROC
+
+    !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    ! Standardized Methods
+    !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    !%%%% Initialize the list %%%%
+
+    !Initialize the list
+    LOCAL PROC config()
+        LIST_baseObject_clear list;
+    ENDPROC
+
+    !%%%% Direct Access to list %%%%
+
+    !Allow acces to list
+    FUNC baseObject baseObject_list(num i)
+        RETURN list{i};
+    ENDFUNC
+
+    !Allow access to list lenght
+    FUNC num baseObject_lenght()
+        !RETURN list_lenght;
+        RETURN LIST_baseObject_lenght(list);
+    ENDFUNC
+
+    !%%%% DataPointer methods %%%%
+
+    !Set a datapointers value
+    PROC baseObject_set(INOUT dataPointer pointer,baseObject value)
+        IF dataPointer_isReference(pointer) SetDataVal pointer.name,value;
+        IF dataPointer_isReference(pointer) RETURN ;
+        IF dataPointer_isValue(pointer) pointer.value:=ValToStr(value);
+        IF dataPointer_isValue(pointer) RETURN ;
+        IF dataPointer_isIndex(pointer) list{pointer.id}:=value;
+        IF dataPointer_isIndex(pointer) RETURN ;
+        !If the pointer is none of the above, create a new pointer with string val
+        IF NOT USE_DYNAMIC_DATA_ALLOCATION pointer:=baseObject_(value);
+        IF NOT USE_DYNAMIC_DATA_ALLOCATION RETURN ;
+        !ERROR
+        !Data Pointer Not set up
+        errno_bookAndRaise ERR_BAD_DATA_POINTER;
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !Get a datapointers value
+    FUNC baseObject baseObject_get(dataPointer pointer)
+        VAR baseObject returnValue;
+        returnValue:=baseObject_NULL;
+        IF dataPointer_isReference(pointer) GetDataVal pointer.name,returnValue;
+        IF dataPointer_isValue(pointer) errFromBool StrToVal(pointer.value,returnValue),ERR_SYM_ACCESS;
+        IF dataPointer_isIndex(pointer) returnValue:=list{pointer.id};
+        RETURN returnValue;
+    ERROR
+        !RAISE ;
+    ENDFUNC
+
+    !Method for to create a value-datapointer from a value, or that points to a value
+    FUNC dataPointer baseObject_(baseObject value\switch asReference)
+        VAR dataPointer pointer;
+        pointer.type:=Type(value);
+        IF Present(asReference) pointer.name:=ArgName(value);
+        IF NOT Present(asReference) pointer.value:=ValToStr(value);
+        RETURN pointer;
+    ERROR
+        !RAISE ;
+    ENDFUNC
+
+    ! %%%% LIST methods %%%%
+
+    !Initialize new list
+    PROC LIST_baseObject_clear(
+        INOUT baseObject list{*}
+        \INOUT num lenght)
+
+        FOR i FROM 1 TO Dim(list,1) DO
+            list{i}:=baseObject_NULL;
+        ENDFOR
+
+        IF Present(lenght) lenght:=0;
+
+    ENDPROC
+
+    !Append a datapointer to the list
+    !The optional argument index will be set to the index that was used
+    PROC LIST_baseObject_append(
+        INOUT baseObject list{*}
+        \INOUT num lenght,
+        baseObject item
+        \INOUT num index)
+
+        !Reject null input
+        IF item=baseObject_NULL errno_bookAndRaise(ERR_UNEXPECTED_NULL);
+
+        IF NOT Present(lenght) THEN
+            FOR i FROM 1 TO Dim(list,1) DO
+                IF list{i}=baseObject_NULL THEN
+                    list{i}:=item;
+                    IF Present(index) index:=i;
+                    RETURN ;
+                ENDIF
+            ENDFOR
+            RETURN ;
+        ENDIF
+
+        lenght:=lenght+1;
+        list{lenght}:=item;
+        IF Present(index) index:=lenght;
+
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !Pop the last data pointer in the list
+    !Or if index is specified, pops the index
+    FUNC baseObject LIST_baseObject_pop(
+        INOUT baseObject list{*}
+        \INOUT num lenght,
+        \num index)
+
+        VAR baseObject item;
+
+        !Reject indexes ouside of lenght
+        IF Present(lenght) AND Present(index) THEN
+            IF index>lenght errno_bookAndRaise(ERR_LIST_OUT_OF_RANGE);
+        ENDIF
+
+        !Pop at spesific index
+        IF Present(index) THEN
+            item:=list{index};
+            list{index}:=baseObject_NULL;
+            LIST_baseObject_del list\lenght?lenght\keepIndexes,index;
+            RETURN item;
+        ENDIF
+
+        !Pop at last index, without lenght
+        IF NOT Present(lenght) THEN
+            FOR i FROM Dim(list,1) TO 1 DO
+                IF list{i}<>baseObject_NULL THEN
+                    item:=list{i};
+                    list{i}:=baseObject_NULL;
+                    RETURN item;
+                ENDIF
+            ENDFOR
+        ENDIF
+
+        !Pop at last index, with lenght
+        item:=list{lenght};
+        list{lenght}:=baseObject_NULL;
+        lenght:=lenght-1;
+        RETURN item;
+
+    ERROR
+        !RAISE ;
+    ENDFUNC
+
+    !Delete an item at a position of the list
+    PROC LIST_baseObject_del(
+        INOUT baseObject list{*}
+        \INOUT num lenght
+        \switch keepIndexes,
+        num index)
+
+        !Reject indexes ouside of lenght
+        IF Present(lenght) AND Present(index) THEN
+            IF index>lenght errno_bookAndRaise(ERR_LIST_OUT_OF_RANGE);
+        ENDIF
+
+        !Delet data
+        list{index}:=baseObject_NULL;
+
+        !If indexes should be keept, then don't shift any data around
+        IF Present(keepIndexes) RETURN ;
+
+        !Shift down the above items to close gap, without lenght
+        IF NOT Present(lenght) THEN
+            FOR i FROM index TO Dim(list,1)-1 DO
+                list{index}:=list{index+1};
+            ENDFOR
+            list{Dim(list,1)}:=baseObject_NULL;
+            RETURN ;
+        ENDIF
+
+        !Shift down the above items to close gap, with lenght
+        FOR i FROM index TO lenght-1 DO
+            list{index}:=list{index+1};
+        ENDFOR
+        list{lenght}:=baseObject_NULL;
+        lenght:=lenght-1;
+
+    ERROR
+        IF ERRNO=ERR_LIST_OUT_OF_RANGE RAISE ERR_LIST_OUT_OF_RANGE;
+        !RAISE ;
+    ENDPROC
+
+    !Returns the number of items actively used in the list (not null)
+    FUNC num LIST_baseObject_lenght(INOUT baseObject list{*})
+        VAR num lenght;
+        lenght:=0;
+
+        FOR i FROM 1 TO Dim(list,1) DO
+            IF list{i}<>baseObject_NULL THEN
+                lenght:=lenght+1;
+            ENDIF
+        ENDFOR
+
+        RETURN lenght;
+    ERROR
+        !RAISE ;
+    ENDFUNC
+
+    !xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    ! Examples
+    !xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+ENDMODULE

@@ -1,0 +1,20 @@
+MODULE RNL_B_hash(SYSMODULE)
+
+    !RNL_B_hash implements string hashing
+
+    !Dependencies
+    ! - None
+
+    !Will return a number from 1 to limit (including limit)
+    FUNC num hash(string keyString,num limit)
+        VAR dnum keyNumber:=0;
+        !Convert keyString to keyNumber
+        FOR i FROM 1 TO StrLen(keyString) DO
+            keyNumber:=keyNumber+NumToDnum(StrToByte(StrPart(keyString,i,1)\Char)+(128*(i-1)));
+        ENDFOR
+        !Map number to limit, and return
+        RETURN 1 + dnumToNum (keyNumber MOD numToDnum(limit));
+    ENDFUNC
+
+
+ENDMODULE

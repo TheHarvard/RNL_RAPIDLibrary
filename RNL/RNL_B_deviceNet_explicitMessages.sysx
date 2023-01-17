@@ -1,0 +1,51 @@
+MODULE RNL_B_deviceNet_explicitMessages(SYSMODULE)
+
+    !Sends a explicit message / asyncronous message to a deviceNet device
+    PROC deviceNet_send(
+        string devicePath,
+        string headerService,
+        string headerPath
+        \num num_
+        \string string_
+        )
+        
+        
+        VAR iodev dev;
+        VAR rawbytes rawdata_out;
+        VAR rawbytes rawdata_in;
+        VAR num input_int;
+        VAR byte return_status;
+        VAR byte return_info;
+        VAR byte return_errcode;
+        VAR byte return_errcode2;
+        ! Empty contents of rawdata_out and  rawdata_in ClearRawBytes rawdata_out; ClearRawBytes rawdata_in;
+        ! Add DeviceNet header to rawdata_out  with service 
+        ! "SET_ATTRIBUTE_SINGLE" and path to  filter attribute on 
+        ! DeviceNet I/O device 
+        PackDNHeader headerService,headerPath,rawdata_out;
+        ! Add filter value to send to DeviceNet  I/O device 
+        input_int:=5;
+        PackRawBytes input_int,rawdata_out,(RawBytesLen(rawdata_out)+1)\IntX:=USINT;
+        ! Open I/O device 
+        Open devicePath,dev\Bin;
+        ! Write the contents of rawdata_out to  the I/O device 
+        WriteRawBytes dev,rawdata_out\NoOfBytes:=RawBytesLen(rawdata_out);
+        ! Read the answer from the I/O  device 
+        ReadRawBytes dev,rawdata_in;
+        ! Close the I/O device 
+        Close dev;
+        ! Unpack rawdata_in to the variable  return_status 
+        UnpackRawBytes rawdata_in,1,return_status\Hex1;
+        IF return_status=144 THEN
+            TPWrite "Status OK from device. Status  code:"\Num:=return_status;
+        ELSE
+            ! Unpack error codes from device  answer 
+            UnpackRawBytes rawdata_in,2,return_errcode\Hex1;
+            UnpackRawBytes rawdata_in,3,return_errcode2\Hex1;
+            TPWrite "Error code from device: "\Num:=return_errcode;
+            TPWrite "Additional error code from  device: "\Num:=return_errcode2;
+        ENDIF
+    ENDPROC
+
+
+ENDMODULE

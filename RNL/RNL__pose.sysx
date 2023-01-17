@@ -1,0 +1,443 @@
+MODULE RNL__pose(SYSMODULE)
+
+    !This is the reference for all datatype/object modules. 
+    !To create a new datatype copy this module and ctrl+f replace
+    !"pose" With the new datatype, set the NULL value to a value
+    !that will never be in use, and adjust the list{X} size.
+
+
+    !Datatype: pose
+    !Module with standard methods for the datatype
+
+    !***************************************************************************
+    ! Data
+    !***************************************************************************
+
+    !    RECORD pose
+    !        dataPointer self;
+    !        num exampleNumber1;
+    !        num exampleNumber2;
+    !        num exampleNumber3;
+    !    ENDRECORD
+
+    !A constant that can be searched for to determine if a datatype module is loaded
+    PERS dataType dataType_pose:="pose";
+
+    !Per module setting for whether the list should be used
+    !IF this bool is set to false then the NEW keyword will
+    !will create a stirng value datapointer for this datatype.
+    !If it is set to true, then the NEW keyword will use the pre declared list.
+    LOCAL CONST bool USE_DYNAMIC_DATA_ALLOCATION:=FALSE;
+
+    !INHERITS_FROM is the type that this type inherits from.
+    ! "" signifies no inheritance
+    LOCAL CONST dataType INHERITS_FROM:="";
+
+    !Null constants
+    CONST pose pose_NULL:=[[0,0,0],[0,0,0,0]];
+    LOCAL CONST pose pose_DEFAULT:=[[0,0,0],[1,0,0,0]];
+
+    !Pre delcared list to be dynamically allocated
+    LOCAL VAR pose list{1};
+    !LOCAL VAR num list_lenght:=0;
+
+    !###########################################################################
+    ! NEW Constructor and ERASE Destructor
+    !###########################################################################
+
+    !NEW constructor with initial values
+    FUNC dataPointer NEW_pose(
+        \num trans_x
+        \num trans_y
+        \num trans_z
+        \num rot_x
+        \num rot_y
+        \num rot_z
+        )
+        VAR dataPointer pointer;
+        VAR pose data;
+
+        VAR pos rotation;
+
+        !Allocate and set data
+        NEW pointer;
+
+        !Set initial data 
+        data:=pose_get(pointer);
+
+        IF Present(trans_x) data.trans.x:=trans_x;
+        IF Present(trans_y) data.trans.y:=trans_y;
+        IF Present(trans_z) data.trans.z:=trans_z;
+
+        rotation:=[0,0,0];
+
+        IF Present(rot_x) rotation.x:=rot_x;
+        IF Present(rot_y) rotation.y:=rot_y;
+        IF Present(rot_z) rotation.z:=rot_z;
+
+        IF rotation<>[0,0,0] THEN
+            data.rot:=OrientZYX(rotation.z,rotation.y,rotation.x);
+            data.rot:=NOrient(data.rot);
+        ENDIF
+
+        pose_set pointer,data;
+
+        !Return pointer
+        RETURN pointer;
+    ENDFUNC
+
+    !NEW constructor to allocate a data and return pointer
+    LOCAL PROC NEW(INOUT dataPointer pointer\dataPointer self)
+        VAR pose data;
+        VAR dataPointer self_;
+        VAR dataPointer inheritanceParent;
+        VAR dataPointer inheritanceParent_Pointer;
+
+        self_:=pointer;
+        IF Present(self) self_:=self;
+
+        data:=pose_DEFAULT;
+        !IF Present(self) data.self:=self_;
+
+        IF USE_DYNAMIC_DATA_ALLOCATION=TRUE THEN
+            
+            !Set the rmqLocation to this task
+            pointer.rmqLocation := rmqQueue_SELF();
+            
+            !Allocate a list position
+            pointer.type:=Type(list);
+            LIST_pose_append list,data\index:=pointer.id;
+
+            IF NOT INHERITS_FROM="" THEN
+                !Create nessesary inheritance chain
+                inheritanceParent:=NEW_(INHERITS_FROM);
+                inheritanceParent_Pointer:=NEW_("dataPointer");
+                dataPointer_set inheritanceParent_Pointer,inheritanceParent;
+                pointer.inheritanceParent_id:=inheritanceParent_Pointer.id;
+                pointer.inheritanceParent_name:=inheritanceParent_Pointer.name;
+            ENDIF
+
+        ELSE
+            !Create a string value datatype
+            pointer:=pose_(data);
+        ENDIF
+
+
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !Resolve an RMQ_execute command for this datatype. Return result
+    LOCAL PROC RMQ_execute(INOUT dataPointer pointer,VAR rmqmessage message)
+        VAR pose data;
+        RMQGetMsgData message,data;
+
+        !Add custom behavior for "executing" this datatype here
+        pointer:=dataPointer_NULL;
+
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !Allocate a data, set the data to recived RMQ message, and return pointer
+    LOCAL PROC RMQ_NEW(INOUT dataPointer pointer,VAR rmqmessage message)
+
+        VAR pose data;
+        RMQGetMsgData message,data;
+
+        IF USE_DYNAMIC_DATA_ALLOCATION=TRUE THEN
+            NEW pointer;
+            pose_set pointer,data;
+            RETURN ;
+        ENDIF
+
+        pointer:=pose_(data);
+
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !Send RMQ message of this datatype
+    LOCAL PROC RMQ_send(INOUT dataPointer data,dataPointer queue,dataPointer code)
+        VAR pose data_;
+        VAR string queue_;
+        VAR num code_;
+
+        VAR rmqslot slot;
+
+        data_:=pose_get(data);
+        queue_:=string_get(queue);
+        code_:=num_get(code);
+
+        RMQFindSlot slot,queue_;
+        RMQSendMessage slot,data_\UserDef:=code_;
+
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !Cleans up any datapointer
+    LOCAL PROC ERASE(INOUT dataPointer pointer)
+
+        VAR dataPointer inheritanceParent;
+
+        !Call ERASE on the object that this object inherits from
+        IF pointer.inheritanceParent_name<>""
+            OR pointer.inheritanceParent_id>0 THEN
+            inheritanceParent.id:=pointer.inheritanceParent_id;
+            inheritanceParent.name:=pointer.inheritanceParent_name;
+
+            ERASE_ inheritanceParent;
+        ENDIF
+
+        !ERASE
+        IF dataPointer_isReference(pointer) pose_set pointer,pose_NULL;
+        IF dataPointer_isIndex(pointer) LIST_pose_del list\keepIndexes,pointer.id;
+        pointer:=dataPointer_NULL;
+
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !///////////////////////////////////////////////////////////////////////////
+    ! Privat Data Methods
+    !///////////////////////////////////////////////////////////////////////////
+
+    !¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤
+    ! WRAPPER Methods
+    !¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤
+
+    !===========================================================================
+    ! Public Data/Object Methods
+    !===========================================================================
+
+    !---------------------------------------------------------------------------
+    ! Auxiliary Methods
+    !---------------------------------------------------------------------------
+
+    !&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+    ! Getter and Setter Methods
+    !&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+
+    !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    ! Standardized Methods
+    !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    !%%%% Direct Access to list %%%%
+
+    !Initialize the list
+    LOCAL PROC config()
+        LIST_pose_clear list;
+    ENDPROC
+
+    !%%%% Direct Access to list %%%%
+
+    !Allow acces to list
+    FUNC pose pose_list(num i)
+        RETURN list{i};
+    ENDFUNC
+
+    !Allow access to list lenght
+    FUNC num pose_lenght()
+        !RETURN list_lenght;
+        RETURN LIST_pose_lenght(list);
+    ENDFUNC
+
+    !%%%% Event Handler %%%%
+
+    !event_handler is the default target for events subscribed to this object
+    LOCAL PROC event_handler(dataPointer pointer,dataPointer eventNote)
+        !Add default event handeling here
+    ENDPROC
+
+    !%%%% DataPointer methods %%%%
+
+    !Set a datapointers value
+    PROC pose_set(INOUT dataPointer pointer,pose value)
+        IF dataPointer_isReference(pointer) SetDataVal pointer.name,value;
+        IF dataPointer_isReference(pointer) RETURN;
+        IF dataPointer_isValue(pointer) pointer.value:=ValToStr(value);
+        IF dataPointer_isValue(pointer) RETURN;
+        IF dataPointer_isIndex(pointer) list{pointer.id}:=value;
+        IF dataPointer_isIndex(pointer) RETURN;
+        !If the pointer is none of the above, create a new pointer with string val
+        IF NOT USE_DYNAMIC_DATA_ALLOCATION pointer:=pose_(value);
+        IF NOT USE_DYNAMIC_DATA_ALLOCATION RETURN;
+        !ERROR
+        !Data Pointer Not set up
+        errno_bookAndRaise ERR_BAD_DATA_POINTER;
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !Get a datapointers value
+    FUNC pose pose_get(dataPointer pointer)
+        VAR pose returnValue;
+        returnValue:=pose_NULL;
+        IF dataPointer_isReference(pointer) GetDataVal pointer.name,returnValue;
+        IF dataPointer_isValue(pointer) errFromBool StrToVal(pointer.value,returnValue),ERR_SYM_ACCESS;
+        IF dataPointer_isIndex(pointer) returnValue:=list{pointer.id};
+        RETURN returnValue;
+    ERROR
+        !RAISE ;
+    ENDFUNC
+
+    !Method for to create a value-datapointer from a value, or that points to a value
+    FUNC dataPointer pose_(pose value\switch asReference)
+        VAR dataPointer pointer;
+        pointer.type:=Type(value);
+        IF Present(asReference) pointer.name:=ArgName(value);
+        IF NOT Present(asReference) pointer.value:=ValToStr(value);
+        RETURN pointer;
+    ERROR
+        !RAISE ;
+    ENDFUNC
+
+    ! %%%% LIST methods %%%%
+
+    !Initialize new list
+    PROC LIST_pose_clear(
+        INOUT pose list{*}
+        \INOUT num lenght)
+
+        FOR i FROM 1 TO Dim(list,1) DO
+            list{i}:=pose_NULL;
+        ENDFOR
+
+        IF Present(lenght) lenght:=0;
+
+    ENDPROC
+
+    !Append a datapointer to the list
+    !The optional argument index will be set to the index that was used
+    PROC LIST_pose_append(
+        INOUT pose list{*}
+        \INOUT num lenght,
+        pose item
+        \INOUT num index)
+
+        !Reject null input
+        IF item=pose_NULL errno_bookAndRaise(ERR_UNEXPECTED_NULL);
+
+        IF NOT Present(lenght) THEN
+            FOR i FROM 1 TO Dim(list,1) DO
+                IF list{i}=pose_NULL THEN
+                    list{i}:=item;
+                    IF Present(index) index:=i;
+                    RETURN ;
+                ENDIF
+            ENDFOR
+            RETURN ;
+        ENDIF
+
+        lenght:=lenght+1;
+        list{lenght}:=item;
+        IF Present(index) index:=lenght;
+
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !Pop the last data pointer in the list
+    !Or if index is specified, pops the index
+    FUNC pose LIST_pose_pop(
+        INOUT pose list{*}
+        \INOUT num lenght,
+        \num index)
+
+        VAR pose item;
+
+        !Reject indexes ouside of lenght
+        IF Present(lenght) AND Present(index) THEN
+            IF index>lenght errno_bookAndRaise(ERR_LIST_OUT_OF_RANGE);
+        ENDIF
+
+        !Pop at spesific index
+        IF Present(index) THEN
+            item:=list{index};
+            list{index}:=pose_NULL;
+            LIST_pose_del list \lenght?lenght \keepIndexes,index;
+            RETURN item;
+        ENDIF
+
+        !Pop at last index, without lenght
+        IF NOT Present(lenght) THEN
+            FOR i FROM Dim(list,1) TO 1 DO
+                IF list{i}<>pose_NULL THEN
+                    item:=list{i};
+                    list{i}:=pose_NULL;
+                    RETURN item;
+                ENDIF
+            ENDFOR
+        ENDIF
+
+        !Pop at last index, with lenght
+        item:=list{lenght};
+        list{lenght}:=pose_NULL;
+        lenght:=lenght-1;
+        RETURN item;
+
+    ERROR
+        !RAISE ;
+    ENDFUNC
+
+    !Delete an item at a position of the list
+    PROC LIST_pose_del(
+        INOUT pose list{*}
+        \INOUT num lenght
+        \switch keepIndexes,
+        num index)
+
+        !Reject indexes ouside of lenght
+        IF Present(lenght) AND Present(index) THEN
+            IF index>lenght errno_bookAndRaise(ERR_LIST_OUT_OF_RANGE);
+        ENDIF
+
+        !Delet data
+        list{index}:=pose_NULL;
+
+        !If indexes should be keept, then don't shift any data around
+        IF Present(keepIndexes) RETURN ;
+
+        !Shift down the above items to close gap, without lenght
+        IF NOT Present(lenght) THEN
+            FOR i FROM index TO Dim(list,1)-1 DO
+                list{index}:=list{index+1};
+            ENDFOR
+            list{Dim(list,1)}:=pose_NULL;
+            RETURN ;
+        ENDIF
+
+        !Shift down the above items to close gap, with lenght
+        FOR i FROM index TO lenght-1 DO
+            list{index}:=list{index+1};
+        ENDFOR
+        list{lenght}:=pose_NULL;
+        lenght:=lenght-1;
+
+    ERROR
+        IF ERRNO=ERR_LIST_OUT_OF_RANGE RAISE ERR_LIST_OUT_OF_RANGE;
+        !RAISE ;
+    ENDPROC
+
+    !Returns the number of items actively used in the list (not null)
+    FUNC num LIST_pose_lenght(INOUT pose list{*})
+        VAR num lenght;
+        lenght:=0;
+
+        FOR i FROM 1 TO Dim(list,1) DO
+            IF list{i}<>pose_NULL THEN
+                lenght:=lenght+1;
+            ENDIF
+        ENDFOR
+
+        RETURN lenght;
+    ERROR
+        !RAISE ;
+    ENDFUNC
+
+    !xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    ! Examples
+    !xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+ENDMODULE

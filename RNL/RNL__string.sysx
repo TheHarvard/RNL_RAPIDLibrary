@@ -1,0 +1,100 @@
+MODULE RNL__string(SYSMODULE)
+    
+    CONST string string_NULL := "string_NULL";
+    
+    LOCAL VAR string list{1000};
+    
+    !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    ! Standardized Methods
+    !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    
+    !DataPointer methods
+    
+    PROC string_set(INOUT dataPointer pointer, string value)
+        IF dataPointer_isReference(pointer) SetDataVal pointer.name,value;
+        IF dataPointer_isReference(pointer) RETURN;
+        IF dataPointer_isValue(pointer) pointer.value:=ValToStr(value);
+        IF dataPointer_isValue(pointer) RETURN;
+        IF dataPointer_isIndex(pointer) list{pointer.id}:=value;
+        IF dataPointer_isIndex(pointer) RETURN;
+        !If the pointer is none of the above, create a new pointer with string val
+        pointer:=string_(value);
+        RETURN;
+        !ERROR
+        !Data Pointer Not set up
+        errno_bookAndRaise ERR_BAD_DATA_POINTER;    ENDPROC
+    
+    FUNC string string_get(dataPointer pointer)
+        VAR string returnValue;
+        returnValue := string_NULL;
+        IF dataPointer_isReference(pointer) GetDataVal pointer.name,returnValue;
+        IF dataPointer_isValue(pointer) errFromBool StrToVal(pointer.value,returnValue),ERR_SYM_ACCESS;
+        IF dataPointer_isIndex(pointer) returnValue := returnValue;
+        RETURN returnValue;
+    ENDFUNC
+    
+    FUNC dataPointer string_(string value)
+        VAR dataPointer pointer;
+        pointer.type := type(value);
+        !pointer.name := argName(value);
+        pointer.value := ValToStr(value);
+        RETURN pointer;
+    ENDFUNC
+    
+    PROC string_NEW()
+        <SMT>
+    ENDPROC
+    
+    !LIST methods
+    
+    !Append a datapointer to the list
+    PROC LIST_string_append(INOUT string list{*},string item)
+
+        VAR string NULL;
+        NULL:=string_NULL;
+
+        FOR i FROM 1 TO Dim(list,1) DO
+            IF list{i}=NULL THEN
+                list{i}:=item;
+                RETURN ;
+            ENDIF
+        ENDFOR
+
+    ENDPROC
+
+    !Pop the last data pointer in the list
+    FUNC num LIST_string_pop(INOUT num list{*})
+
+        VAR num item;
+        VAR num NULL;
+        NULL:=num_NULL;
+
+        FOR i FROM Dim(list,1) TO 1 DO
+            IF list{i}<>NULL THEN
+                item:=list{i};
+                list{i}:=NULL;
+                RETURN item;
+            ENDIF
+        ENDFOR
+
+    ENDFUNC
+
+    !Returns the number of items actively used in the list
+    FUNC num LIST_string_lenght(INOUT string list{*})
+
+        VAR num lenght;
+        VAR string NULL;
+        lenght:=0;
+        NULL:=string_NULL;
+
+        FOR i FROM 1 TO Dim(list,1) DO
+            IF list{i}<>NULL THEN
+                lenght:=lenght+1;
+            ENDIF
+        ENDFOR
+
+        RETURN lenght;
+
+    ENDFUNC
+    
+ENDMODULE

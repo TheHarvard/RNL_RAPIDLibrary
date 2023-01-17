@@ -1,0 +1,96 @@
+MODULE RNL_B_ping(SYSMODULE)
+
+    !This module implements ping procedures for pinging a robot through RMQ
+
+    PROC ping()
+    ENDPROC
+
+    PROC ping1(dataPointer d1)
+    ENDPROC
+
+    PROC ping2(dataPointer d1,dataPointer d2)
+    ENDPROC
+
+    PROC ping3(dataPointer d1,dataPointer d2,dataPointer d3)
+    ENDPROC
+
+    PROC ping4(dataPointer d1,dataPointer d2,dataPointer d3,dataPointer d4)
+    ENDPROC
+
+    PROC ping5(dataPointer d1,dataPointer d2,dataPointer d3,dataPointer d4,dataPointer d5)
+    ENDPROC
+
+    PROC ping6(dataPointer d1,dataPointer d2,dataPointer d3,dataPointer d4,dataPointer d5,dataPointer d6)
+    ENDPROC
+
+    PROC ping7(dataPointer d1,dataPointer d2,dataPointer d3,dataPointer d4,dataPointer d5,dataPointer d6,dataPointer d7)
+    ENDPROC
+
+    PROC ping8(dataPointer d1,dataPointer d2,dataPointer d3,dataPointer d4,dataPointer d5,dataPointer d6,dataPointer d7,dataPointer d8)
+    ENDPROC
+
+    PROC ping9(dataPointer d1,dataPointer d2,dataPointer d3,dataPointer d4,dataPointer d5,dataPointer d6,dataPointer d7,dataPointer d8,dataPointer d9)
+    ENDPROC
+
+
+    PROC ping_ERROR()
+        RAISE 1;
+    ERROR
+        RAISE ;
+    ENDPROC
+
+    PROC ping1_ERROR(dataPointer d1)
+        RAISE 1;
+    ERROR
+        RAISE ;
+    ENDPROC
+
+    PROC ping2_ERROR(dataPointer d1,dataPointer d2)
+        RAISE 1;
+    ERROR
+        RAISE ;
+    ENDPROC
+
+    PROC ping3_ERROR(dataPointer d1,dataPointer d2,dataPointer d3)
+        RAISE 1;
+    ERROR
+        RAISE ;
+    ENDPROC
+
+    PROC ping4_ERROR(dataPointer d1,dataPointer d2,dataPointer d3,dataPointer d4)
+        RAISE 1;
+    ERROR
+        RAISE ;
+    ENDPROC
+
+    PROC ping5_ERROR(dataPointer d1,dataPointer d2,dataPointer d3,dataPointer d4,dataPointer d5)
+        RAISE 1;
+    ERROR
+        RAISE ;
+    ENDPROC
+
+    PROC ping6_ERROR(dataPointer d1,dataPointer d2,dataPointer d3,dataPointer d4,dataPointer d5,dataPointer d6)
+        RAISE 1;
+    ERROR
+        RAISE ;
+    ENDPROC
+
+    PROC ping7_ERROR(dataPointer d1,dataPointer d2,dataPointer d3,dataPointer d4,dataPointer d5,dataPointer d6,dataPointer d7)
+        RAISE 1;
+    ERROR
+        RAISE ;
+    ENDPROC
+
+    PROC ping8_ERROR(dataPointer d1,dataPointer d2,dataPointer d3,dataPointer d4,dataPointer d5,dataPointer d6,dataPointer d7,dataPointer d8)
+        RAISE 1;
+    ERROR
+        RAISE ;
+    ENDPROC
+
+    PROC ping9_ERROR(dataPointer d1,dataPointer d2,dataPointer d3,dataPointer d4,dataPointer d5,dataPointer d6,dataPointer d7,dataPointer d8,dataPointer d9)
+        RAISE 1;
+    ERROR
+        RAISE ;
+    ENDPROC
+    
+ENDMODULE

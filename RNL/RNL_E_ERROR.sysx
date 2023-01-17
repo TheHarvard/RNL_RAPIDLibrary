@@ -1,0 +1,55 @@
+MODULE RNL_E_ERROR(SYSMODULE)
+    
+    !This E module contains procedures realted to error handeling
+    
+    !Dependencies:
+    ! - Node
+    
+    
+    RECORD errorData
+        errdomain domain;
+        errnum id;
+        errtype type;
+        
+        string title;
+        string string1;
+        string string2;
+        string string3;
+        string string4;
+        string string5;
+        
+        unixTime timestamp;
+    ENDRECORD
+
+    VAR errnum ERR_UNEXPECTED_NULL := -1;
+    VAR errnum ERR_INVALID_ARGUMENTS := -1;
+    VAR errnum ERR_LIST_OUT_OF_RANGE := -1;
+    VAR errnum ERR_INDEX_OUT_OF_RANGE := -1;
+
+    
+    !errno_bookAndRaise books a errno before raising it, if it was not allready 
+    !booked
+    PROC errno_bookAndRaise(errnum errorNumber)
+        IF errorNumber=-1 BookErrNo errorNumber;
+        RAISE errorNumber;
+    ERROR
+        RAISE ;
+    ENDPROC
+    
+    !Raises an error if the boolean FALSE value is recived.
+    !Usefull when functions return a boolean for success.
+    PROC errFromBool(bool functResult,errnum errorID)
+        IF NOT functResult RAISE errorID;
+    ERROR
+        RAISE ;
+    ENDPROC
+
+    !Return true of errorNumber one of the 4 late binding errors 
+    FUNC bool ERR_isLaterbinding(errnum errorNumber)
+        RETURN errorNumber=ERR_REFUNKDAT
+        OR errorNumber=ERR_REFUNKFUN
+        OR errorNumber=ERR_REFUNKPRC
+        OR errorNumber=ERR_CALLPROC;
+    ENDFUNC
+    
+ENDMODULE

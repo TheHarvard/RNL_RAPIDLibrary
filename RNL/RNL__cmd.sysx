@@ -1,0 +1,513 @@
+MODULE RNL__cmd(SYSMODULE)
+
+    !Datatype: cmd
+    !cmd is a compacted version of "command" designed to be able to fit in smaller messages
+
+    !Dependencies:
+    ! - RNL__command
+
+    !***************************************************************************
+    ! Data
+    !***************************************************************************
+
+    RECORD cmd
+        string object_type;
+        string object_value_name_id;
+        string method;
+        string argument1_type;
+        string argument1_value_name_id;
+        string argument2_type;
+        string argument2_value_name_id;
+        string argument3_type;
+        string argument3_value_name_id;
+        string argument4_type;
+        string argument4_value_name_id;
+        string argument5_type;
+        string argument5_value_name_id;
+    ENDRECORD
+
+
+    !A constant that can be searched for to determine if a datatype module is loaded
+    PERS dataType dataType_cmd:="cmd";
+
+    !Per module setting for whether the list should be used
+    !IF this bool is set to false then the NEW keyword will
+    !will create a stirng value datapointer for this datatype.
+    !If it is set to true, then the NEW keyword will use the pre declared list.
+    LOCAL CONST bool USE_DYNAMIC_DATA_ALLOCATION:=TRUE;
+
+    !INHERITS_FROM is the type that this type inherits from.
+    ! "" signifies no inheritance
+    LOCAL CONST dataType INHERITS_FROM:="";
+
+    !Null constants
+    CONST cmd cmd_NULL:=["","","string_NULL","","","","","","","","","",""];
+    LOCAL CONST cmd cmd_DEFAULT:=["","","","","","","","","","","","",""];
+
+
+    !Pre delcared list to be dynamically allocated
+    LOCAL VAR cmd list{200};
+    !LOCAL VAR num list_lenght:=0;
+
+    !###########################################################################
+    ! NEW Constructor and ERASE Destructor
+    !###########################################################################
+
+!    !NEW constructor with initial values
+!    FUNC dataPointer NEW_cmd(
+!        \dataPointer object
+!        \procedurePointer method
+!        \dataPointer argument1
+!        \dataPointer argument2
+!        \dataPointer argument3
+!        \dataPointer argument4
+!        \dataPointer argument5
+!        \dataPointer argument6
+!        \dataPointer argument7
+!        \dataPointer argument8
+!        \dataPointer argument9
+!        )
+!        VAR dataPointer pointer;
+!        VAR cmd data;
+
+!        !Allocate and set data
+!        NEW pointer;
+
+!        !Set initial data 
+!        data:=cmd_get(pointer);
+
+!        IF Present(object) data.object:=object;
+!        IF Present(method) data.method:=method;
+!        IF Present(argument1) data.argument1:=argument1;
+!        IF Present(argument3) data.argument3:=argument3;
+!        IF Present(argument4) data.argument4:=argument4;
+!        IF Present(argument5) data.argument5:=argument5;
+
+!        cmd_set pointer,data;
+
+!        !Return pointer
+!        RETURN pointer;
+!    ENDFUNC
+
+    !NEW constructor to allocate a data and return pointer
+    LOCAL PROC NEW(INOUT dataPointer pointer\dataPointer self)
+        VAR cmd data;
+        VAR dataPointer self_;
+        VAR dataPointer inheritanceParent;
+        VAR dataPointer inheritanceParent_Pointer;
+
+        self_:=pointer;
+        IF Present(self) self_:=self;
+
+        data:=cmd_DEFAULT;
+        !data.self:=self_;
+
+        IF USE_DYNAMIC_DATA_ALLOCATION=TRUE THEN
+
+            !Set the rmqLocation to this task
+            pointer.rmqLocation:=rmqQueue_SELF();
+
+            !Allocate a list position
+            pointer.type:=Type(list);
+            LIST_cmd_append list,data\index:=pointer.id;
+
+            IF NOT INHERITS_FROM="" THEN
+                !Create nessesary inheritance chain
+                inheritanceParent:=NEW_(INHERITS_FROM);
+                inheritanceParent_Pointer:=NEW_("dataPointer");
+                dataPointer_set inheritanceParent_Pointer,inheritanceParent;
+                pointer.inheritanceParent_id:=inheritanceParent_Pointer.id;
+                pointer.inheritanceParent_name:=inheritanceParent_Pointer.name;
+            ENDIF
+
+        ELSE
+            !Create a string value datatype
+            pointer:=cmd_(data);
+        ENDIF
+
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !Resolve an RMQ_execute cmd for this datatype. Return result
+    LOCAL PROC RMQ_execute(INOUT dataPointer pointer)
+        VAR cmd cmdData;
+        VAR command commandData;
+        cmdData:=cmd_get(pointer);
+        
+        !Convert cmd into command
+        commandData := cmd_to_command(cmdData);
+
+        !Execute the command
+        command_execute commandData;
+
+        !Convert command back into cmd
+        cmdData := command_to_cmd(commandData);
+        
+        cmd_set pointer,cmdData;
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !Allocate a data, set the data to recived RMQ message, and return pointer
+    LOCAL PROC RMQ_NEW(INOUT dataPointer pointer,VAR rmqmessage message)
+
+        VAR cmd data;
+        RMQGetMsgData message,data;
+        TPWrite "RMQ Recived cmd: "+ValToStr(data.method);
+
+        IF USE_DYNAMIC_DATA_ALLOCATION=TRUE THEN
+            NEW pointer;
+            cmd_set pointer,data;
+            RETURN ;
+        ENDIF
+
+        pointer:=cmd_(data);
+
+
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !Send RMQ message of this datatype
+    LOCAL PROC RMQ_send(INOUT dataPointer data,dataPointer queue,dataPointer code)
+        VAR cmd data_;
+        VAR string queue_;
+        VAR num code_;
+
+        VAR rmqslot slot;
+
+        data_:=cmd_get(data);
+        queue_:=string_get(queue);
+        code_:=num_get(code);
+
+        RMQFindSlot slot,queue_;
+        RMQSendMessage slot,data_\UserDef:=code_;
+
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !Cleans up any datapointer
+    LOCAL PROC ERASE(INOUT dataPointer pointer)
+
+        VAR dataPointer inheritanceParent;
+
+        !Call ERASE on the object that this object inherits from
+        IF pointer.inheritanceParent_name<>""
+            OR pointer.inheritanceParent_id>0 THEN
+            inheritanceParent.id:=pointer.inheritanceParent_id;
+            inheritanceParent.name:=pointer.inheritanceParent_name;
+
+            ERASE_ inheritanceParent;
+        ENDIF
+
+        !ERASE
+        IF dataPointer_isReference(pointer) cmd_set pointer,cmd_NULL;
+        IF dataPointer_isIndex(pointer) LIST_cmd_del list\keepIndexes,pointer.id;
+        pointer:=dataPointer_NULL;
+
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !///////////////////////////////////////////////////////////////////////////
+    ! Privat Data Methods
+    !///////////////////////////////////////////////////////////////////////////
+
+    !¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤
+    ! WRAPPER Methods
+    !¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤¤
+
+    !===========================================================================
+    ! Public Data/Object Methods
+    !===========================================================================
+
+    !---------------------------------------------------------------------------
+    ! Auxiliary Methods
+    !---------------------------------------------------------------------------
+
+    !Converts a cmd to a command
+    FUNC command cmd_to_command(cmd fromData)
+        VAR cmd fromData_;
+        VAR command toData_;
+        fromData_:=fromData;
+
+        toData_.object.type:=fromData_.object_type;
+        toData_.object.value:=fromData_.object_value_name_id;
+
+        toData_.method:=fromData_.method;
+
+        toData_.argument1.type:=fromData_.argument1_type;
+        toData_.argument1.value:=fromData_.argument1_value_name_id;
+
+        toData_.argument2.type:=fromData_.argument2_type;
+        toData_.argument2.value:=fromData_.argument2_value_name_id;
+
+        toData_.argument3.type:=fromData_.argument3_type;
+        toData_.argument3.value:=fromData_.argument3_value_name_id;
+
+        toData_.argument4.type:=fromData_.argument4_type;
+        toData_.argument4.value:=fromData_.argument4_value_name_id;
+
+        toData_.argument5.type:=fromData_.argument5_type;
+        toData_.argument5.value:=fromData_.argument5_value_name_id;
+
+        RETURN toData_;
+    ENDFUNC
+
+    !Converts a command to cmd
+    FUNC cmd command_to_cmd(command fromData)
+        VAR command fromData_;
+        VAR cmd toData_;
+        fromData_:=fromData;
+
+        toData_.object_type:=fromData_.object.type;
+        toData_.object_value_name_id:=fromData_.object.value;
+
+        toData_.method:=fromData_.method;
+
+        toData_.argument1_type:=fromData_.argument1.type;
+        toData_.argument1_value_name_id:=fromData_.argument1.value;
+
+        toData_.argument2_type:=fromData_.argument2.type;
+        toData_.argument2_value_name_id:=fromData_.argument2.value;
+
+        toData_.argument3_type:=fromData_.argument3.type;
+        toData_.argument3_value_name_id:=fromData_.argument3.value;
+
+        toData_.argument4_type:=fromData_.argument4.type;
+        toData_.argument4_value_name_id:=fromData_.argument4.value;
+
+        toData_.argument5_type:=fromData_.argument5.type;
+        toData_.argument5_value_name_id:=fromData_.argument5.value;
+
+        RETURN toData_;
+    ENDFUNC
+
+    !&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+    ! Getter and Setter Methods
+    !&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+
+    !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    ! Standardized Methods
+    !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    !%%%% Direct Access to list %%%%
+
+    !Initialize the list
+    LOCAL PROC config()
+        LIST_cmd_clear list;
+    ENDPROC
+
+    !%%%% Direct Access to list %%%%
+
+    !Allow acces to list
+    FUNC cmd cmd_list(num i)
+        RETURN list{i};
+    ENDFUNC
+
+    !Allow access to list lenght
+    FUNC num cmd_lenght()
+        !RETURN list_lenght;
+        RETURN LIST_cmd_lenght(list);
+    ENDFUNC
+
+    !%%%% Event Handler %%%%
+
+    !event_handler is the default target for events subscribed to this object
+    LOCAL PROC event_handler(dataPointer pointer,dataPointer eventNote)
+        !Add default event handeling here
+    ENDPROC
+
+    !%%%% DataPointer methods %%%%
+
+    !Set a datapointers value
+    PROC cmd_set(INOUT dataPointer pointer,cmd value)
+        IF dataPointer_isReference(pointer) SetDataVal pointer.name,value;
+        IF dataPointer_isReference(pointer) RETURN ;
+        IF dataPointer_isValue(pointer) pointer.value:=ValToStr(value);
+        IF dataPointer_isValue(pointer) RETURN ;
+        IF dataPointer_isIndex(pointer) list{pointer.id}:=value;
+        IF dataPointer_isIndex(pointer) RETURN ;
+        !If the pointer is none of the above, create a new pointer with string val
+        IF NOT USE_DYNAMIC_DATA_ALLOCATION pointer:=cmd_(value);
+        IF NOT USE_DYNAMIC_DATA_ALLOCATION RETURN ;
+        !ERROR
+        !Data Pointer Not set up
+        errno_bookAndRaise ERR_BAD_DATA_POINTER;
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !Get a datapointers value
+    FUNC cmd cmd_get(dataPointer pointer)
+        VAR cmd returnValue;
+        returnValue:=cmd_NULL;
+        IF dataPointer_isReference(pointer) GetDataVal pointer.name,returnValue;
+        IF dataPointer_isValue(pointer) errFromBool StrToVal(pointer.value,returnValue),ERR_SYM_ACCESS;
+        IF dataPointer_isIndex(pointer) returnValue:=list{pointer.id};
+        RETURN returnValue;
+    ERROR
+        !RAISE ;
+    ENDFUNC
+
+    !Method for to create a value-datapointer from a value, or that points to a value
+    FUNC dataPointer cmd_(cmd value\switch asReference)
+        VAR dataPointer pointer;
+        pointer.type:=Type(value);
+        IF Present(asReference) pointer.name:=ArgName(value);
+        IF NOT Present(asReference) pointer.value:=ValToStr(value);
+        RETURN pointer;
+    ERROR
+        !RAISE ;
+    ENDFUNC
+
+    ! %%%% LIST methods %%%%
+
+    !Initialize new list
+    PROC LIST_cmd_clear(
+        INOUT cmd list{*}
+        \INOUT num lenght)
+
+        FOR i FROM 1 TO Dim(list,1) DO
+            list{i}:=cmd_NULL;
+        ENDFOR
+
+        IF Present(lenght) lenght:=0;
+
+    ENDPROC
+
+    !Append a datapointer to the list
+    !The optional argument index will be set to the index that was used
+    PROC LIST_cmd_append(
+        INOUT cmd list{*}
+        \INOUT num lenght,
+        cmd item
+        \INOUT num index)
+
+        !Reject null input
+        IF item=cmd_NULL errno_bookAndRaise(ERR_UNEXPECTED_NULL);
+
+        IF NOT Present(lenght) THEN
+            FOR i FROM 1 TO Dim(list,1) DO
+                IF list{i}=cmd_NULL THEN
+                    list{i}:=item;
+                    IF Present(index) index:=i;
+                    RETURN ;
+                ENDIF
+            ENDFOR
+            RETURN ;
+        ENDIF
+
+        lenght:=lenght+1;
+        list{lenght}:=item;
+        IF Present(index) index:=lenght;
+
+    ERROR
+        !RAISE ;
+    ENDPROC
+
+    !Pop the last data pointer in the list
+    !Or if index is specified, pops the index
+    FUNC cmd LIST_cmd_pop(
+        INOUT cmd list{*}
+        \INOUT num lenght,
+        \num index)
+
+        VAR cmd item;
+
+        !Reject indexes ouside of lenght
+        IF Present(lenght) AND Present(index) THEN
+            IF index>lenght errno_bookAndRaise(ERR_LIST_OUT_OF_RANGE);
+        ENDIF
+
+        !Pop at spesific index
+        IF Present(index) THEN
+            item:=list{index};
+            list{index}:=cmd_NULL;
+            LIST_cmd_del list\lenght?lenght\keepIndexes,index;
+            RETURN item;
+        ENDIF
+
+        !Pop at last index, without lenght
+        IF NOT Present(lenght) THEN
+            FOR i FROM Dim(list,1) TO 1 DO
+                IF list{i}<>cmd_NULL THEN
+                    item:=list{i};
+                    list{i}:=cmd_NULL;
+                    RETURN item;
+                ENDIF
+            ENDFOR
+        ENDIF
+
+        !Pop at last index, with lenght
+        item:=list{lenght};
+        list{lenght}:=cmd_NULL;
+        lenght:=lenght-1;
+        RETURN item;
+
+    ERROR
+        !RAISE ;
+    ENDFUNC
+
+    !Delete an item at a position of the list
+    PROC LIST_cmd_del(
+        INOUT cmd list{*}
+        \INOUT num lenght
+        \switch keepIndexes,
+        num index)
+
+        !Reject indexes ouside of lenght
+        IF Present(lenght) AND Present(index) THEN
+            IF index>lenght errno_bookAndRaise(ERR_LIST_OUT_OF_RANGE);
+        ENDIF
+
+        !Delet data
+        list{index}:=cmd_NULL;
+
+        !If indexes should be keept, then don't shift any data around
+        IF Present(keepIndexes) RETURN ;
+
+        !Shift down the above items to close gap, without lenght
+        IF NOT Present(lenght) THEN
+            FOR i FROM index TO Dim(list,1)-1 DO
+                list{index}:=list{index+1};
+            ENDFOR
+            list{Dim(list,1)}:=cmd_NULL;
+            RETURN ;
+        ENDIF
+
+        !Shift down the above items to close gap, with lenght
+        FOR i FROM index TO lenght-1 DO
+            list{index}:=list{index+1};
+        ENDFOR
+        list{lenght}:=cmd_NULL;
+        lenght:=lenght-1;
+
+    ERROR
+        IF ERRNO=ERR_LIST_OUT_OF_RANGE RAISE ERR_LIST_OUT_OF_RANGE;
+        !RAISE ;
+    ENDPROC
+
+    !Returns the number of items actively used in the list (not null)
+    FUNC num LIST_cmd_lenght(INOUT cmd list{*})
+        VAR num lenght;
+        lenght:=0;
+
+        FOR i FROM 1 TO Dim(list,1) DO
+            IF list{i}<>cmd_NULL THEN
+                lenght:=lenght+1;
+            ENDIF
+        ENDFOR
+
+        RETURN lenght;
+    ERROR
+        !RAISE ;
+    ENDFUNC
+
+    !xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    ! Examples
+    !xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+ENDMODULE

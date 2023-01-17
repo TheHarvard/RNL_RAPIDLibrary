@@ -1,0 +1,31 @@
+MODULE RNL___CurrentVersion(SYSMODULE)
+    
+    !This module allows the user to check the version of RNL
+    
+    ! ALFA - ALFA versions are meant for active development, and not for active use
+    ! BETA - BETA versions are meant for testing of new features
+    !      - versions with no suffix are stable and to be installed on all robots
+
+    !Previous versions:
+    
+    !Current version:
+    LOCAL CONST string version := "01.000-ALFA";
+    
+    !Future versions (example):
+    !LOCAL CONST string version := "01.000-Beta";
+    !LOCAL CONST string version := "01.001";
+    !LOCAL CONST string version := "01.020";
+    !LOCAL CONST string version := "01.300-ALFA";
+    !LOCAL CONST string version := "02.004";
+    !LOCAL CONST string version := "03.021";
+    
+    FUNC string RNL_getVersion()
+        RETURN version;
+    ENDFUNC
+    
+    PROC RNL_printVersion()
+        TPWrite "RNL Version: "+version;
+    ENDPROC
+    
+    
+ENDMODULE

@@ -1,0 +1,52 @@
+MODULE RNL__ModuleExample
+    
+    !This is an example of a RNL singleton datatype module.
+    !A singelton datatype is like a normal datatype, but can not be instanciated
+    
+    !The name of a RNL singleton datatype can not be the same as any other RNL module or datatype.
+    !Replace all instances of "ModuleExample" with the name of your new module.
+    
+    
+    !dataType is used to determine that the module is loaded.
+    PERS dataType dataType_ModuleExample:="ModuleExample";
+    
+    !dataPointer is a pointer to the singleton module.
+    PERS dataPointer ModuleExample:=["ModuleExample","ModuleExample",0,"","",0,""];
+
+    
+    !config is called first thing after a ppToMain event.
+    LOCAL PROC config()
+    ENDPROC
+
+    !Init is called just before the first main()/update().
+    LOCAL PROC init()
+    ENDPROC
+    
+    !Update is called once per cycle, after global main() is called.
+    LOCAL PROC update()
+    ENDPROC
+    
+    
+    LOCAL PROC singleton_event_example()
+        var event e;
+        
+        !Don't actually run this, it is just an example.
+        Stop\AllMoveTasks;
+        
+        !create a subscription so that if theis singleton triggers event "e"
+        !the procedure "singleton_event_example" in this singleton will be called.
+        CREATE NEW_subscription(
+        \triggerObject:=ModuleExample
+        \triggerEvent:=e
+        \reciverObject:=ModuleExample
+        \reciverProcName:="singleton_event_example");
+        
+        !trigger the event "e" from this singleton.
+        TRIGGER \object:=ModuleExample, e;
+        
+        !Call a method in this singleton
+        try \obj:=ModuleExample, "singleton_event_example";
+        
+    ENDPROC
+    
+ENDMODULE
